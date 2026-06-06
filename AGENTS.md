@@ -8,6 +8,21 @@ A GitHub **template repository** for hackathon attendees. When someone clicks "U
 
 The contents of this repo are **scaffolding**, not a working application. Attendees will replace/extend it with their actual project code.
 
+## Project — Coastal Angler Guide
+
+A fishing guide website built with Vite + React + Tailwind CSS, located in `Coastal-Angler-Guide/`.
+
+### Starting the dev server
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+cd Coastal-Angler-Guide/artifacts/fishing-app
+PORT=5173 BASE_PATH=/ nohup npx vite --config vite.config.ts --host 0.0.0.0 </dev/null >/tmp/vite-fishing.log 2>&1 &
+disown
+```
+
+The site will be available at `http://localhost:5173/`.
+
 ## Repo layout
 
 - `.devcontainer/devcontainer.json` — Codespaces / dev container config. References `Dockerfile.local` via `build:`, declares VS Code extensions, forwarded ports, and host requirements.
