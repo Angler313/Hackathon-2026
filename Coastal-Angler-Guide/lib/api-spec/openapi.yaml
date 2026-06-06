@@ -1,0 +1,868 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Hyper-Local Fishing Companion API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: fishing
+    description: Fishing AI analysis endpoints
+  - name: spots
+    description: Fishing spot management
+  - name: catches
+    description: Catch log management
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /fishing/analyze-fish:
+    post:
+      operationId: analyzeFish
+      tags: [fishing]
+      summary: Identify fish from photo and estimate size/weight
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FishImageInput"
+      responses:
+        "200":
+          description: Fish analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FishAnalysis"
+
+  /fishing/analyze-rod:
+    post:
+      operationId: analyzeRod
+      tags: [fishing]
+      summary: Scan fishing rod photo to get specs and rig recommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RodImageInput"
+      responses:
+        "200":
+          description: Rod analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RodAnalysis"
+
+  /fishing/rig-recommendations:
+    post:
+      operationId: getRigRecommendations
+      tags: [fishing]
+      summary: Get rig and bait recommendations based on conditions and target species
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RigRequestInput"
+      responses:
+        "200":
+          description: Rig recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RigRecommendations"
+
+  /fishing/cast-angle:
+    post:
+      operationId: getCastAngle
+      tags: [fishing]
+      summary: Calculate optimal cast angle based on rod weight and sinker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CastAngleInput"
+      responses:
+        "200":
+          description: Cast angle recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CastAngleResult"
+
+  /fishing/water-depth:
+    post:
+      operationId: analyzeWaterDepth
+      tags: [fishing]
+      summary: Analyze water body image for depth and fish location predictions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaterImageInput"
+      responses:
+        "200":
+          description: Water depth and fish location analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaterAnalysis"
+
+  /fishing/search-location:
+    post:
+      operationId: searchLocation
+      tags: [fishing]
+      summary: Search any body of water by name and get full fishing conditions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocationSearchInput"
+      responses:
+        "200":
+          description: Location search result with conditions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationSearchResult"
+
+  /fishing/conditions:
+    post:
+      operationId: getConditions
+      tags: [fishing]
+      summary: Get live fishing conditions for a location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConditionsInput"
+      responses:
+        "200":
+          description: Live fishing conditions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FishingConditions"
+
+  /spots:
+    get:
+      operationId: listSpots
+      tags: [spots]
+      summary: List saved fishing spots
+      responses:
+        "200":
+          description: List of fishing spots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FishingSpot"
+    post:
+      operationId: createSpot
+      tags: [spots]
+      summary: Save a new fishing spot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FishingSpotInput"
+      responses:
+        "201":
+          description: Created spot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FishingSpot"
+
+  /spots/{id}:
+    delete:
+      operationId: deleteSpot
+      tags: [spots]
+      summary: Delete a fishing spot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /catches:
+    get:
+      operationId: listCatches
+      tags: [catches]
+      summary: List catch log entries
+      responses:
+        "200":
+          description: List of catches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CatchEntry"
+    post:
+      operationId: createCatch
+      tags: [catches]
+      summary: Log a new catch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatchEntryInput"
+      responses:
+        "201":
+          description: Created catch entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatchEntry"
+
+  /catches/{id}:
+    delete:
+      operationId: deleteCatch
+      tags: [catches]
+      summary: Delete a single catch entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /catches/clear:
+    delete:
+      operationId: clearAllCatches
+      tags: [catches]
+      summary: Delete all catch entries (reset the log)
+      responses:
+        "204":
+          description: All catches cleared
+
+  /catches/stats:
+    get:
+      operationId: getCatchStats
+      tags: [catches]
+      summary: Get aggregated catch statistics
+      responses:
+        "200":
+          description: Catch statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatchStats"
+
+  /location-observations:
+    get:
+      operationId: getLocationObservations
+      tags: [fishing]
+      summary: Get all species observed by the user at a location
+      parameters:
+        - name: locationName
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of observed species
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LocationObservation"
+    post:
+      operationId: addLocationObservation
+      tags: [fishing]
+      summary: Log a species observed at a location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocationObservationInput"
+      responses:
+        "201":
+          description: Observation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationObservation"
+
+  /location-observations/{id}:
+    delete:
+      operationId: deleteLocationObservation
+      tags: [fishing]
+      summary: Remove a species observation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    FishImageInput:
+      type: object
+      required: [imageBase64]
+      properties:
+        imageBase64:
+          type: string
+          description: Base64 encoded fish image
+        referenceObjectCm:
+          type: ["number", "null"]
+          description: Size of known reference object in cm (optional, for scale)
+
+    FishAnalysis:
+      type: object
+      required: [species, confidence, lengthEstimateCm, weightEstimateKg, catchingTips, description]
+      properties:
+        species:
+          type: string
+        commonName:
+          type: string
+        confidence:
+          type: number
+          description: 0-1 confidence score
+        lengthEstimateCm:
+          type: number
+        weightEstimateKg:
+          type: number
+        description:
+          type: string
+        catchingTips:
+          type: array
+          items:
+            type: string
+        bestRigs:
+          type: array
+          items:
+            type: string
+        bestBaits:
+          type: array
+          items:
+            type: string
+        regulations:
+          type: string
+
+    RodImageInput:
+      type: object
+      required: [imageBase64, targetSpecies]
+      properties:
+        imageBase64:
+          type: string
+        targetSpecies:
+          type: string
+
+    RodAnalysis:
+      type: object
+      required: [rodType, powerRating, actionRating, recommendedLineWeight, recommendedLureWeight, rigRecommendation, castingTips]
+      properties:
+        rodType:
+          type: string
+        powerRating:
+          type: string
+        actionRating:
+          type: string
+        recommendedLineWeight:
+          type: string
+        recommendedLureWeight:
+          type: string
+        rigRecommendation:
+          type: string
+        sinkerWeight:
+          type: string
+        castingTips:
+          type: array
+          items:
+            type: string
+
+    RigRequestInput:
+      type: object
+      required: [targetSpecies, waterType, conditions]
+      properties:
+        targetSpecies:
+          type: string
+        waterType:
+          type: string
+          enum: [pier, surf, bank, jetty, pond, lake, river, ocean]
+        conditions:
+          $ref: "#/components/schemas/WaterConditionInput"
+
+    WaterConditionInput:
+      type: object
+      properties:
+        waterClarity:
+          type: string
+          enum: [clear, murky, stained]
+        waveHeight:
+          type: string
+          enum: [calm, moderate, rough]
+        windSpeed:
+          type: ["number", "null"]
+        windDirection:
+          type: ["string", "null"]
+        waterTempF:
+          type: ["number", "null"]
+        tidalPhase:
+          type: ["string", "null"]
+        barometricPressure:
+          type: ["number", "null"]
+
+    RigRecommendations:
+      type: object
+      required: [primaryRig, alternativeRigs, baitRecommendations, reasoning]
+      properties:
+        primaryRig:
+          $ref: "#/components/schemas/RigDetail"
+        alternativeRigs:
+          type: array
+          items:
+            $ref: "#/components/schemas/RigDetail"
+        baitRecommendations:
+          type: array
+          items:
+            type: string
+        reasoning:
+          type: string
+        hotTip:
+          type: ["string", "null"]
+
+    RigDetail:
+      type: object
+      required: [name, sinker, hook, leader, description]
+      properties:
+        name:
+          type: string
+        sinker:
+          type: string
+        hook:
+          type: string
+        leader:
+          type: string
+        description:
+          type: string
+
+    CastAngleInput:
+      type: object
+      required: [rodLengthFt, sinkerWeightOz, targetDistanceFt]
+      properties:
+        rodLengthFt:
+          type: number
+        sinkerWeightOz:
+          type: number
+        targetDistanceFt:
+          type: number
+        windSpeedMph:
+          type: ["number", "null"]
+        windDirection:
+          type: ["string", "null"]
+
+    CastAngleResult:
+      type: object
+      required: [optimalAngleDegrees, expectedDistanceFt, technique, tips]
+      properties:
+        optimalAngleDegrees:
+          type: number
+        expectedDistanceFt:
+          type: number
+        technique:
+          type: string
+        tips:
+          type: array
+          items:
+            type: string
+
+    WaterImageInput:
+      type: object
+      required: [imageBase64, waterBodyType, season]
+      properties:
+        imageBase64:
+          type: string
+        waterBodyType:
+          type: string
+          enum: [ocean, lake, pond, river, bay, estuary]
+        season:
+          type: string
+          enum: [spring, summer, fall, winter]
+
+    WaterAnalysis:
+      type: object
+      required: [estimatedDepthProfile, fishZones, seasonalBehavior]
+      properties:
+        estimatedDepthProfile:
+          type: string
+        fishZones:
+          type: array
+          items:
+            $ref: "#/components/schemas/FishZone"
+        seasonalBehavior:
+          type: string
+        structureNotes:
+          type: string
+        bestTimeToFish:
+          type: string
+
+    FishZone:
+      type: object
+      required: [zone, depthFt, species, activity]
+      properties:
+        zone:
+          type: string
+        depthFt:
+          type: string
+        species:
+          type: array
+          items:
+            type: string
+        activity:
+          type: string
+
+    ConditionsInput:
+      type: object
+      required: [latitude, longitude, waterBodyType]
+      properties:
+        latitude:
+          type: number
+        longitude:
+          type: number
+        waterBodyType:
+          type: string
+
+    FishingConditions:
+      type: object
+      required: [windSpeed, windDirection, barometricPressure, waterTemp, tidalPhase, overallRating, activityForecast]
+      properties:
+        windSpeed:
+          type: number
+        windDirection:
+          type: string
+        barometricPressure:
+          type: number
+        waterTemp:
+          type: ["number", "null"]
+        tidalPhase:
+          type: string
+        waveHeight:
+          type: ["number", "null"]
+        salinity:
+          type: ["number", "null"]
+        waterClarity:
+          type: string
+        overallRating:
+          type: number
+          description: 1-10 fishing rating
+        activityForecast:
+          type: string
+        tideChart:
+          type: array
+          items:
+            $ref: "#/components/schemas/TidePoint"
+
+    TidePoint:
+      type: object
+      required: [time, heightFt, type]
+      properties:
+        time:
+          type: string
+        heightFt:
+          type: number
+        type:
+          type: string
+
+    FishingSpot:
+      type: object
+      required: [id, name, waterBodyType, latitude, longitude, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        waterBodyType:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    FishingSpotInput:
+      type: object
+      required: [name, waterBodyType, latitude, longitude]
+      properties:
+        name:
+          type: string
+        waterBodyType:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    CatchEntry:
+      type: object
+      required: [id, species, weightKg, lengthCm, waterBodyType, caughtAt]
+      properties:
+        id:
+          type: integer
+        species:
+          type: string
+        weightKg:
+          type: number
+        lengthCm:
+          type: number
+        waterBodyType:
+          type: string
+        rigUsed:
+          type: ["string", "null"]
+        baitUsed:
+          type: ["string", "null"]
+        imageBase64:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        caughtAt:
+          type: string
+
+    CatchEntryInput:
+      type: object
+      required: [species, weightKg, lengthCm, waterBodyType]
+      properties:
+        species:
+          type: string
+        weightKg:
+          type: number
+        lengthCm:
+          type: number
+        waterBodyType:
+          type: string
+        rigUsed:
+          type: ["string", "null"]
+        baitUsed:
+          type: ["string", "null"]
+        imageBase64:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    CatchStats:
+      type: object
+      required: [totalCatches, topSpecies, heaviestCatch, avgWeightKg, catchesByWaterType]
+      properties:
+        totalCatches:
+          type: integer
+        topSpecies:
+          type: array
+          items:
+            type: string
+        heaviestCatch:
+          type: ["number", "null"]
+        avgWeightKg:
+          type: number
+        catchesByWaterType:
+          type: object
+          additionalProperties:
+            type: integer
+
+    LocationObservation:
+      type: object
+      required: [id, locationName, resolvedName, species, observedAt]
+      properties:
+        id:
+          type: integer
+        locationName:
+          type: string
+        resolvedName:
+          type: string
+        species:
+          type: string
+        notes:
+          type: ["string", "null"]
+        observedAt:
+          type: string
+
+    LocationObservationInput:
+      type: object
+      required: [locationName, resolvedName, species]
+      properties:
+        locationName:
+          type: string
+        resolvedName:
+          type: string
+        species:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    LocationSearchInput:
+      type: object
+      required: [locationName]
+      properties:
+        locationName:
+          type: string
+          description: Name of any body of water or fishing location (e.g. "Galveston Beach", "Lake Tahoe", "Mississippi River New Orleans")
+
+    BaitRecommendation:
+      type: object
+      required: [species, liveBaits, artificials, topLiveBait, topArtificial, bestTime, tip]
+      properties:
+        species:
+          type: string
+        topLiveBait:
+          type: string
+          description: The single most effective live bait for this species given current conditions — must exactly match one item from liveBaits
+        topArtificial:
+          type: string
+          description: The single most effective artificial lure for this species given current conditions — must exactly match one item from artificials
+        liveBaits:
+          type: array
+          items:
+            type: string
+          description: Best live baits for this species at this location
+        artificials:
+          type: array
+          items:
+            type: string
+          description: Best artificial lures / soft plastics
+        bestTime:
+          type: string
+          description: Best time of day or tidal phase to target this species
+        tip:
+          type: string
+          description: One short pro tip for catching this species here
+
+    FishingZone:
+      type: object
+      required: [name, description, technique]
+      properties:
+        name:
+          type: string
+          description: Short label (e.g. "North Bank Shallows", "Deep Hole Center")
+        description:
+          type: string
+          description: Why fish hold here
+        technique:
+          type: string
+          description: Best technique for this zone
+
+    WaterProfile:
+      type: object
+      required: [estimatedDepthFt, estimatedAcres, bottomType, vegetation, waterColor, stockingHistory, fishingZones, accessPoints, insiderNotes]
+      properties:
+        estimatedDepthFt:
+          type: object
+          required: [shallow, deep, avg]
+          properties:
+            shallow:
+              type: number
+            deep:
+              type: number
+            avg:
+              type: number
+        estimatedAcres:
+          type: number
+          description: Approximate surface area
+        bottomType:
+          type: string
+          description: e.g. "soft mud with some gravel near inlet"
+        vegetation:
+          type: array
+          items:
+            type: string
+          description: Types of aquatic plants present (lily pads, hydrilla, cattails, etc.)
+        waterColor:
+          type: string
+          description: e.g. "dark tannic green", "murky brown", "clear"
+        stockingHistory:
+          type: string
+          description: Likely stocking history and source (managed HOA, TPWD stocked, natural population, etc.)
+        fishingZones:
+          type: array
+          items:
+            $ref: "#/components/schemas/FishingZone"
+          description: 3-5 specific spots within this water body
+        accessPoints:
+          type: string
+          description: How to access the water (bank fishing only, dock, etc.)
+        insiderNotes:
+          type: string
+          description: Additional local knowledge about this specific water body
+
+    LocationSearchResult:
+      type: object
+      required: [resolvedName, latitude, longitude, waterBodyType, region, conditions]
+      properties:
+        resolvedName:
+          type: string
+          description: Full resolved place name
+        latitude:
+          type: number
+        longitude:
+          type: number
+        waterBodyType:
+          type: string
+        region:
+          type: string
+          description: State/region description
+        topSpecies:
+          type: array
+          items:
+            type: string
+          description: Most common fish species at this location
+        baitRecommendations:
+          type: array
+          items:
+            $ref: "#/components/schemas/BaitRecommendation"
+          description: Live bait and lure guide per species
+        waterProfile:
+          $ref: "#/components/schemas/WaterProfile"
+          description: Detailed water body profile (present for lakes, ponds, and rivers)
+        conditions:
+          $ref: "#/components/schemas/FishingConditions"
