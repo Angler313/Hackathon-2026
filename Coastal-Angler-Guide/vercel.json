@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://fantastic-broccoli-wvr56w66qxq5cg764-3001.app.github.dev/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
