@@ -2,17 +2,49 @@ import { Layout } from "@/components/layout";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useGetRigRecommendations, useGetCastAngle } from "@workspace/api-client-react";
-import { Anchor, AlertCircle } from "lucide-react";
+import { Anchor, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
 import { RigRequestInputWaterType } from "@workspace/api-client-react/src/generated/api.schemas";
+import { cn } from "@/lib/utils";
+
+const ALL_SPECIES = [
+  "Red Drum", "Spotted Seatrout", "Speckled Trout", "Black Drum", "Sheepshead",
+  "Southern Flounder", "Flounder (Southern)", "Gulf Flounder", "Summer Flounder (Fluke)",
+  "Spanish Mackerel", "King Mackerel", "Cobia", "Jack Crevalle", "Ladyfish",
+  "Sand Seatrout", "Sand Trout", "Atlantic Croaker", "Whiting (Gulf Kingfish)",
+  "Pompano", "Florida Pompano", "Spot", "Silver Perch", "Pinfish", "Pigfish", "Striped Mullet",
+  "Hardhead Catfish", "Gafftop Catfish (Sail Catfish)",
+  "Blacktip Shark", "Bonnethead Shark", "Atlantic Sharpnose Shark", "Bull Shark", "Spinner Shark",
+  "Southern Stingray", "Cownose Ray",
+  "Bluefish", "False Albacore (Little Tunny)",
+  "Mangrove Snapper", "Lane Snapper", "Vermilion Snapper", "Triggerfish",
+  "Amberjack (Greater)", "Grouper (Gag)", "Grouper (Red)", "Mahi-Mahi (Dolphinfish)",
+  "Tautog (Blackfish)", "Scup (Porgy)", "Black Sea Bass", "Striped Bass",
+  "Tarpon", "Snook", "Bonefish", "Permit",
+  "Largemouth Bass", "Smallmouth Bass", "Channel Catfish", "Blue Catfish", "Flathead Catfish",
+  "Bullhead Catfish", "White Crappie", "Black Crappie", "Bluegill", "Redear Sunfish (Shellcracker)",
+  "Green Sunfish", "Longear Sunfish", "Warmouth", "Yellow Perch",
+  "Walleye", "Northern Pike", "Muskellunge (Muskie)", "Chain Pickerel",
+  "Carp", "Buffalo Fish", "White Bass", "Hybrid Striped Bass", "Yellow Bass",
+  "Freshwater Drum", "Gar (Longnose)", "Alligator Gar", "Spotted Gar", "Bowfin (Dogfish)",
+  "Rainbow Trout", "Brown Trout", "Brook Trout", "Lake Trout", "Steelhead Trout",
+  "Chinook Salmon (King)", "Coho Salmon (Silver)", "Kokanee Salmon", "Chinook Salmon (Great Lakes)",
+  "Whitefish (Lake)", "Redfin Pickerel", "Spotted Sucker", "Rock Bass",
+  "California Halibut", "Lingcod", "Rockfish (Various)", "Surf Perch",
+  "Leopard Shark", "Bat Ray", "Sturgeon (White)", "Jacksmelt",
+  "Gizzard Shad", "Threadfin Shad", "Inland Silverside",
+];
 
 export default function RigPlanner() {
   const [species, setSpecies] = useState("Red Drum");
   const [waterType, setWaterType] = useState<RigRequestInputWaterType>("pier");
+  const [speciesOpen, setSpeciesOpen] = useState(false);
   
   const [rodLength, setRodLength] = useState("7");
   const [sinkerWeight, setSinkerWeight] = useState("2");
@@ -64,20 +96,30 @@ export default function RigPlanner() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Target Species</Label>
-                    <Select value={species} onValueChange={setSpecies}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select species" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Red Drum">Red Drum</SelectItem>
-                        <SelectItem value="Speckled Trout">Speckled Trout</SelectItem>
-                        <SelectItem value="Flounder">Flounder</SelectItem>
-                        <SelectItem value="Spanish Mackerel">Spanish Mackerel</SelectItem>
-                        <SelectItem value="Redfish">Redfish</SelectItem>
-                        <SelectItem value="Snook">Snook</SelectItem>
-                        <SelectItem value="Tarpon">Tarpon</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Popover open={speciesOpen} onOpenChange={setSpeciesOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                          {species || "Type or select species..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                        <Command shouldFilter={false}>
+                          <CommandInput placeholder="Type any species name..." onValueChange={(v) => setSpecies(v)} />
+                          <CommandList>
+                            <CommandEmpty>Press Enter to use this name</CommandEmpty>
+                            <CommandGroup>
+                              {ALL_SPECIES.filter(s => s.toLowerCase().includes((species || "").toLowerCase())).slice(0, 40).map(s => (
+                                <CommandItem key={s} value={s} onSelect={(v) => { setSpecies(v); setSpeciesOpen(false); }}>
+                                  <Check className={cn("mr-2 h-4 w-4", species === s ? "opacity-100" : "opacity-0")} />
+                                  {s}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <Label>Water Type</Label>

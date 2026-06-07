@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, MapPin, Loader2, X } from "lucide-react";
+import { Search, MapPin, Loader2, X, AlertCircle } from "lucide-react";
 import { useSearchLocation } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,22 +22,25 @@ const SUGGESTIONS = [
   "Colorado River, AZ",
 ];
 
+interface SearchResult {
+  resolvedName: string;
+  latitude: number;
+  longitude: number;
+  waterBodyType: string;
+  region: string;
+  topSpecies: string[];
+  conditions: unknown;
+}
+
 interface LocationSearchProps {
-  onResult: (result: {
-    resolvedName: string;
-    latitude: number;
-    longitude: number;
-    waterBodyType: string;
-    region: string;
-    topSpecies: string[];
-    conditions: unknown;
-  }) => void;
+  onResult: (result: SearchResult) => void;
 }
 
 export function LocationSearch({ onResult }: LocationSearchProps) {
   const [query, setQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
+  const [notFoundMsg, setNotFoundMsg] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchLocation = useSearchLocation();
 
@@ -56,11 +59,15 @@ export function LocationSearch({ onResult }: LocationSearchProps) {
   const handleSearch = (locationName: string) => {
     if (!locationName.trim()) return;
     setShowSuggestions(false);
+    setNotFoundMsg(null);
     searchLocation.mutate(
       { data: { locationName: locationName.trim() } },
       {
-        onSuccess: (result) => {
-          onResult(result as Parameters<typeof onResult>[0]);
+        onSuccess: (result: any) => {
+          if (result.matchNote) {
+            setNotFoundMsg(result.matchNote);
+          }
+          onResult(result as SearchResult);
           setQuery("");
         },
       }
@@ -81,7 +88,7 @@ export function LocationSearch({ onResult }: LocationSearchProps) {
             ref={inputRef}
             data-testid="input-location-search"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); setNotFoundMsg(null); }}
             onKeyDown={handleKeyDown}
             onFocus={() => query.length >= 2 && setShowSuggestions(true)}
             placeholder='Search any body of water... "Lake Tahoe", "Outer Banks"'
@@ -90,7 +97,7 @@ export function LocationSearch({ onResult }: LocationSearchProps) {
           />
           {query && (
             <button
-              onClick={() => { setQuery(""); setShowSuggestions(false); }}
+              onClick={() => { setQuery(""); setShowSuggestions(false); setNotFoundMsg(null); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               data-testid="button-clear-search"
             >
@@ -125,6 +132,13 @@ export function LocationSearch({ onResult }: LocationSearchProps) {
               <span className="text-foreground">{suggestion}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {notFoundMsg && (
+        <div className="flex items-start gap-2 mt-2 text-sm text-muted-foreground">
+          <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <span>{notFoundMsg}</span>
         </div>
       )}
 

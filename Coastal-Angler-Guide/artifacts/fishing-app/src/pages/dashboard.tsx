@@ -512,12 +512,27 @@ export default function Dashboard() {
         </div>
 
         {activeLocation && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
-            <MapPin className="w-4 h-4 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">{activeLocation.resolvedName}</p>
-              <p className="text-xs text-muted-foreground">{activeLocation.region} &middot; {activeLocation.waterBodyType}</p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+              <MapPin className="w-4 h-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">{activeLocation.resolvedName}</p>
+                <p className="text-xs text-muted-foreground">{activeLocation.region} &middot; {activeLocation.waterBodyType} &middot; {activeLocation.latitude.toFixed(4)}, {activeLocation.longitude.toFixed(4)}</p>
+              </div>
             </div>
+            {activeLocation.latitude && activeLocation.longitude && (
+              <div className="rounded-lg overflow-hidden border border-border h-48">
+                <iframe
+                  title="Map"
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  scrolling="no"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${activeLocation.longitude - 0.05},${activeLocation.latitude - 0.05},${activeLocation.longitude + 0.05},${activeLocation.latitude + 0.05}&layer=mapnik&marker=${activeLocation.latitude},${activeLocation.longitude}`}
+                  className="w-full h-full"
+                />
+              </div>
+            )}
           </div>
         )}
 

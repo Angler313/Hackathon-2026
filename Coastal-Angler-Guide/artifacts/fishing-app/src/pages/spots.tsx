@@ -98,7 +98,7 @@ export default function Spots() {
           <div className="lg:col-span-2">
             {isLoading ? (
               <div className="text-center py-12 text-muted-foreground">Loading spots...</div>
-            ) : spots && spots.length > 0 ? (
+            ) : Array.isArray(spots) && spots.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {spots.map((spot) => (
                   <Card key={spot.id} className="bg-card border-card-border shadow-sm overflow-hidden flex flex-col">

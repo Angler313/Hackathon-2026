@@ -16,12 +16,19 @@ A fishing guide website built with Vite + React + Tailwind CSS, located in `Coas
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-cd Coastal-Angler-Guide/artifacts/fishing-app
+
+# Start the API server (requires PostgreSQL on localhost:5432)
+cd Coastal-Angler-Guide/artifacts/api-server
+DATABASE_URL="postgres://vscode:password@localhost:5432/fishing_guide" PORT=3001 nohup node --enable-source-maps ./dist/index.mjs </dev/null >/tmp/api-server.log 2>&1 &
+disown
+
+# Start the frontend dev server
+cd ../fishing-app
 PORT=5173 BASE_PATH=/ nohup npx vite --config vite.config.ts --host 0.0.0.0 </dev/null >/tmp/vite-fishing.log 2>&1 &
 disown
 ```
 
-The site will be available at `http://localhost:5173/`.
+The site will be available at `http://localhost:5173/`. The Vite dev server proxies `/api/*` requests to the API server on port 3001.
 
 ## Repo layout
 
@@ -87,6 +94,16 @@ shell — the feature is needed to set up the daemon, not just the CLI.
 - **Long-running processes (dev servers, watchers, REPLs, build watchers) must run in the background**, not in the foreground. A foreground `npm run dev` or `python -m http.server` blocks the agent on its own command until it's killed, which wastes the rest of the session. Use `run_in_background: true` (or `&` + `disown` from a shell), capture the output, then continue with other work.
 - After starting a server in the background, verify it actually came up before assuming success (e.g. `curl localhost:PORT/health` or check the captured log). A backgrounded process that crashed on boot looks the same as one that's serving — don't conflate them.
 - Stop background processes you started before declaring a task complete, unless the user explicitly wants them left running.
+
+## Fishing App Data Architecture
+
+The `search-location` endpoint in `Coastal-Angler-Guide/artifacts/api-server/src/routes/fishing/index.ts` uses:
+
+- **Region-based location matching** — `classifyLocation()` resolves a user query through: alias lookup → substring match → Levenshtein fuzzy match (≤2 edits). Returns `null` for unrecognized locations.
+- **No guesses for unknown locations** — if `classifyLocation()` returns `null`, the API responds with `status: "not_found"` and a message like "I don't have specific data for this lake". The frontend `LocationSearch` component displays this inline instead of crashing or showing garbage.
+- **Per-region species lists** — 9 regions (gulf-coast, south-atlantic, northeast, pacific, pacific-nw, florida-keys, great-lakes, inland-south, inland-north, pacific-rivers) + specific lake profiles (lake-houston, lake-conroe, lake-livingston) with TPWD survey data.
+- **SPECIES_BAIT** — 100+ species with bait/lure/tip data from NOAA, TPWD, and published guides.
+- **Sources in responses** — each response includes citation URLs (NOAA, TPWD, etc.).
 
 ## What to push back on
 

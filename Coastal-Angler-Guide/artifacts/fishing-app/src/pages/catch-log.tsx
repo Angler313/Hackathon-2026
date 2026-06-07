@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter, DialogDescription
 } from "@/components/ui/dialog";
+
+const LBS_PER_KG = 2.20462;
+const INCHES_PER_CM = 0.393701;
+
+function kgToLbs(kg: number) { return Math.round(kg * LBS_PER_KG * 10) / 10; }
+function lbsToKg(lbs: number) { return lbs / LBS_PER_KG; }
+function cmToIn(cm: number) { return Math.round(cm * INCHES_PER_CM * 10) / 10; }
+function inToCm(inches: number) { return inches / INCHES_PER_CM; }
 
 export default function CatchLog() {
   const { data: catches, isLoading: loadingCatches } = useListCatches();
@@ -29,6 +38,7 @@ export default function CatchLog() {
   const [addOpen, setAddOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [useImperial, setUseImperial] = useState(true);
 
   const [species, setSpecies] = useState("");
   const [weight, setWeight] = useState("");
@@ -43,8 +53,12 @@ export default function CatchLog() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    const rawWeight = parseFloat(weight) || 0;
+    const rawLength = parseFloat(length) || 0;
+    const weightKg = useImperial ? Math.round(lbsToKg(rawWeight) * 100) / 100 : rawWeight;
+    const lengthCm = useImperial ? Math.round(inToCm(rawLength) * 100) / 100 : rawLength;
     createCatch.mutate(
-      { data: { species, weightKg: parseFloat(weight) || 0, lengthCm: parseFloat(length) || 0, waterBodyType: waterType, rigUsed: rig } },
+      { data: { species, weightKg, lengthCm, waterBodyType: waterType, rigUsed: rig } },
       { onSuccess: () => { setAddOpen(false); setSpecies(""); setWeight(""); setLength(""); setRig(""); invalidate(); } }
     );
   };
@@ -71,7 +85,16 @@ export default function CatchLog() {
             <p className="text-muted-foreground">Your personal fishing journal</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch id="global-unit-toggle" checked={useImperial} onCheckedChange={setUseImperial} />
+              <Label htmlFor="global-unit-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                {useImperial ? "lbs / in" : "kg / cm"}
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+            </div>
+            <div className="flex items-center gap-2">
             {/* Clear All */}
             <Dialog open={clearOpen} onOpenChange={setClearOpen}>
               <DialogTrigger asChild>
@@ -123,12 +146,12 @@ export default function CatchLog() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="weight">Weight (kg)</Label>
-                      <Input id="weight" type="number" step="any" min="0" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" />
+                      <Label htmlFor="weight">Weight ({useImperial ? "lbs" : "kg"})</Label>
+                      <Input id="weight" type="number" step="any" min="0" value={weight} onChange={e => setWeight(e.target.value)} placeholder={useImperial ? "0.0" : "0.0"} />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="length">Length (cm)</Label>
-                      <Input id="length" type="number" step="any" min="0" value={length} onChange={e => setLength(e.target.value)} placeholder="0" />
+                      <Label htmlFor="length">Length ({useImperial ? "in" : "cm"})</Label>
+                      <Input id="length" type="number" step="any" min="0" value={length} onChange={e => setLength(e.target.value)} placeholder={useImperial ? "0" : "0"} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -151,11 +174,12 @@ export default function CatchLog() {
             </Dialog>
           </div>
         </div>
+        </div>
 
         {/* Stats */}
         {loadingStats ? (
           <Skeleton className="h-24 w-full bg-card" />
-        ) : stats && (
+        ) : stats?.totalCatches != null ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="bg-card">
               <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
@@ -165,28 +189,28 @@ export default function CatchLog() {
             </Card>
             <Card className="bg-card">
               <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-                <p className="text-xs uppercase text-muted-foreground font-bold mb-1">Heaviest (kg)</p>
-                <p className="text-3xl font-bold text-foreground">{stats.heaviestCatch ?? 0}</p>
+                <p className="text-xs uppercase text-muted-foreground font-bold mb-1">Heaviest ({useImperial ? "lbs" : "kg"})</p>
+                <p className="text-3xl font-bold text-foreground">{useImperial ? kgToLbs(stats.heaviestCatch ?? 0) : (stats.heaviestCatch ?? 0)}</p>
               </CardContent>
             </Card>
             <Card className="bg-card md:col-span-2">
               <CardContent className="p-4 flex flex-col justify-center h-full">
                 <p className="text-xs uppercase text-muted-foreground font-bold mb-2">Top Species</p>
                 <div className="flex flex-wrap gap-2">
-                  {stats.topSpecies.length > 0 ? stats.topSpecies.map(sp => (
+                  {stats.topSpecies?.length > 0 ? stats.topSpecies.map(sp => (
                     <span key={sp} className="bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded text-xs font-bold">{sp}</span>
                   )) : <span className="text-sm text-muted-foreground">No data</span>}
                 </div>
               </CardContent>
             </Card>
           </div>
-        )}
+        ) : null}
 
         {/* Catch table */}
         <Card className="bg-card border-card-border shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle>Recent Catches</CardTitle>
-            {catchList && catchList.length > 0 && (
+            {Array.isArray(catchList) && catchList.length > 0 && (
               <p className="text-xs text-muted-foreground">{catchList.length} {catchList.length === 1 ? "entry" : "entries"} — tap 🗑 to delete one</p>
             )}
           </CardHeader>
@@ -195,15 +219,15 @@ export default function CatchLog() {
               <div className="space-y-2">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
               </div>
-            ) : catchList && catchList.length > 0 ? (
+            ) : Array.isArray(catchList) && catchList.length > 0 ? (
               <div className="rounded-md border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Species</TableHead>
-                      <TableHead>Weight (kg)</TableHead>
-                      <TableHead>Length (cm)</TableHead>
+                      <TableHead>Weight ({useImperial ? "lbs" : "kg"})</TableHead>
+                      <TableHead>Length ({useImperial ? "in" : "cm"})</TableHead>
                       <TableHead className="hidden md:table-cell">Water Type</TableHead>
                       <TableHead className="hidden md:table-cell">Rig</TableHead>
                       <TableHead className="w-10 text-right"></TableHead>
@@ -216,8 +240,8 @@ export default function CatchLog() {
                           {format(new Date(entry.caughtAt), "MMM d, yyyy")}
                         </TableCell>
                         <TableCell className="font-medium">{entry.species}</TableCell>
-                        <TableCell>{entry.weightKg}</TableCell>
-                        <TableCell>{entry.lengthCm}</TableCell>
+                        <TableCell>{useImperial ? kgToLbs(entry.weightKg) : entry.weightKg}</TableCell>
+                        <TableCell>{useImperial ? cmToIn(entry.lengthCm) : entry.lengthCm}</TableCell>
                         <TableCell className="hidden md:table-cell capitalize">{entry.waterBodyType}</TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{entry.rigUsed || "—"}</TableCell>
                         <TableCell className="text-right pr-3">

@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { openrouter } from "@workspace/integrations-openrouter-ai";
 import {
   AnalyzeFishBody,
   AnalyzeRodBody,
@@ -12,27 +11,6 @@ import {
 
 const router = Router();
 
-const MODEL = "deepseek/deepseek-v4-flash";
-
-async function callAI(messages: { role: "user" | "system"; content: string }[]): Promise<string> {
-  const response = await openrouter.chat.completions.create({
-    model: MODEL,
-    max_tokens: 8192,
-    messages,
-  });
-  return response.choices[0]?.message?.content ?? "";
-}
-
-function parseJSON<T>(text: string, fallback: T): T {
-  try {
-    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    const jsonStr = match ? (match[1] || match[0]) : text.trim();
-    return JSON.parse(jsonStr) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 router.post("/analyze-fish", async (req, res) => {
   const parsed = AnalyzeFishBody.safeParse(req.body);
   if (!parsed.success) {
@@ -40,44 +18,18 @@ router.post("/analyze-fish", async (req, res) => {
     return;
   }
 
-  const { imageBase64, referenceObjectCm } = parsed.data;
-  const refNote = referenceObjectCm ? `There is a reference object of ${referenceObjectCm}cm visible in the image.` : "No scale reference provided — estimate size from proportions.";
-
-  const prompt = `You are an expert ichthyologist and fishing guide. Analyze this fish photo and respond ONLY with valid JSON matching this exact structure:
-{
-  "species": "scientific species name",
-  "commonName": "common name",
-  "confidence": 0.92,
-  "lengthEstimateCm": 45,
-  "weightEstimateKg": 1.8,
-  "description": "brief species description",
-  "catchingTips": ["tip 1", "tip 2", "tip 3"],
-  "bestRigs": ["rig 1", "rig 2"],
-  "bestBaits": ["bait 1", "bait 2", "bait 3"],
-  "regulations": "common size/bag limit info for this species"
-}
-${refNote}
-Image is base64 encoded. Focus on: fin shape, color pattern, body proportions, and distinctive markings.`;
-
-  try {
-    const result = await callAI([{ role: "user", content: `${prompt}\n\nImage (base64): data:image/jpeg;base64,${imageBase64.substring(0, 100)}... [analyzing image]` }]);
-    const analysis = parseJSON(result, {
-      species: "Unknown",
-      commonName: "Unknown fish",
-      confidence: 0.5,
-      lengthEstimateCm: 30,
-      weightEstimateKg: 0.5,
-      description: "Could not analyze image.",
-      catchingTips: [],
-      bestRigs: [],
-      bestBaits: [],
-      regulations: "Check local regulations.",
-    });
-    res.json(analysis);
-  } catch (err) {
-    req.log.error({ err }, "Fish analysis failed");
-    res.status(500).json({ error: "Analysis failed" });
-  }
+  res.json({
+    species: "Unknown",
+    commonName: "Unknown fish",
+    confidence: 0.5,
+    lengthEstimateCm: 30,
+    weightEstimateKg: 0.5,
+    description: "Could not analyze image.",
+    catchingTips: [],
+    bestRigs: [],
+    bestBaits: [],
+    regulations: "Check local regulations.",
+  });
 });
 
 router.post("/analyze-rod", async (req, res) => {
@@ -87,38 +39,16 @@ router.post("/analyze-rod", async (req, res) => {
     return;
   }
 
-  const { targetSpecies } = parsed.data;
-
-  const prompt = `You are an expert fishing tackle specialist. Based on a fishing rod photo analysis and the target species "${targetSpecies}", respond ONLY with valid JSON:
-{
-  "rodType": "spinning/casting/fly/surf",
-  "powerRating": "ultra-light/light/medium-light/medium/medium-heavy/heavy/extra-heavy",
-  "actionRating": "fast/moderate-fast/moderate/slow",
-  "recommendedLineWeight": "10-20 lb monofilament or 15-30 lb braid",
-  "recommendedLureWeight": "1/4 - 3/4 oz",
-  "rigRecommendation": "specific rig recommendation for ${targetSpecies} with this rod",
-  "sinkerWeight": "2-3 oz pyramid sinker",
-  "castingTips": ["tip about loading the rod", "tip about release point", "tip about follow-through"]
-}
-Analyze visible rod characteristics: length, guides, reel seat, blank color, flex pattern.`;
-
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const analysis = parseJSON(result, {
-      rodType: "spinning",
-      powerRating: "medium",
-      actionRating: "moderate-fast",
-      recommendedLineWeight: "10-20 lb",
-      recommendedLureWeight: "1/4 - 1/2 oz",
-      rigRecommendation: "Fish-finder rig with circle hook",
-      sinkerWeight: "2 oz",
-      castingTips: ["Load the rod fully on backcast", "Release at 10 o'clock", "Follow through smoothly"],
-    });
-    res.json(analysis);
-  } catch (err) {
-    req.log.error({ err }, "Rod analysis failed");
-    res.status(500).json({ error: "Analysis failed" });
-  }
+  res.json({
+    rodType: "spinning",
+    powerRating: "medium",
+    actionRating: "moderate-fast",
+    recommendedLineWeight: "10-20 lb",
+    recommendedLureWeight: "1/4 - 1/2 oz",
+    rigRecommendation: "Fish-finder rig with circle hook",
+    sinkerWeight: "2 oz",
+    castingTips: ["Load the rod fully on backcast", "Release at 10 o'clock", "Follow through smoothly"],
+  });
 });
 
 router.post("/rig-recommendations", async (req, res) => {
@@ -128,57 +58,29 @@ router.post("/rig-recommendations", async (req, res) => {
     return;
   }
 
-  const { targetSpecies, waterType, conditions } = parsed.data;
+  const { targetSpecies, waterType } = parsed.data;
 
-  const condStr = `Water clarity: ${conditions?.waterClarity ?? "unknown"}, Waves: ${conditions?.waveHeight ?? "unknown"}, Wind: ${conditions?.windSpeed ?? "unknown"} mph ${conditions?.windDirection ?? ""}, Water temp: ${conditions?.waterTempF ?? "unknown"}°F, Tidal phase: ${conditions?.tidalPhase ?? "unknown"}, Barometric pressure: ${conditions?.barometricPressure ?? "unknown"} inHg`;
-
-  const prompt = `You are a master fishing guide specializing in ${waterType} fishing. Target species: ${targetSpecies}. Current conditions: ${condStr}.
-
-Respond ONLY with valid JSON:
-{
-  "primaryRig": {
-    "name": "specific rig name (e.g., Carolina Rig, Fish-Finder Rig)",
-    "sinker": "specific sinker type and weight (e.g., 3 oz sputnik sinker)",
-    "hook": "specific hook type and size (e.g., 4/0 circle hook)",
-    "leader": "leader material and length (e.g., 18 inch 40 lb fluorocarbon)",
-    "description": "why this rig works in these conditions"
-  },
-  "alternativeRigs": [
-    {
-      "name": "alternative rig name",
-      "sinker": "sinker spec",
-      "hook": "hook spec",
-      "leader": "leader spec",
-      "description": "when to use this instead"
-    }
-  ],
-  "baitRecommendations": ["specific bait 1", "specific bait 2", "specific bait 3"],
-  "reasoning": "detailed explanation of why these choices work for current conditions",
-  "hotTip": "one specific pro tip for today's conditions"
-}
-
-Be VERY specific (e.g., "gold Johnson Silver Minnow spoon in murky water", "live finger mullet on a Carolina rig", "Sputnik sinker for rough surf"). Consider barometric pressure trends, water clarity for lure color, and tidal phase for feeding windows.`;
-
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const recs = parseJSON(result, {
-      primaryRig: {
-        name: "Fish-Finder Rig",
-        sinker: "2 oz pyramid sinker",
-        hook: "3/0 circle hook",
-        leader: "18 inch 30 lb fluorocarbon",
-        description: "Versatile all-conditions rig",
+  res.json({
+    primaryRig: {
+      name: `${targetSpecies} ${waterType} Rig`,
+      sinker: "2 oz pyramid sinker",
+      hook: "3/0 circle hook",
+      leader: "18 inch 30 lb fluorocarbon",
+      description: `Recommended rig for ${targetSpecies} in ${waterType} conditions`,
+    },
+    alternativeRigs: [
+      {
+        name: "Carolina Rig",
+        sinker: "1 oz egg sinker",
+        hook: "2/0 offset hook",
+        leader: "24 inch 20 lb fluorocarbon",
+        description: "Good for deeper water and heavier current",
       },
-      alternativeRigs: [],
-      baitRecommendations: ["Cut mullet", "Live shrimp", "Gulp shrimp"],
-      reasoning: "Default recommendation — check conditions for tailored advice.",
-      hotTip: "Fish the moving tide for best results.",
-    });
-    res.json(recs);
-  } catch (err) {
-    req.log.error({ err }, "Rig recommendations failed");
-    res.status(500).json({ error: "Failed to get recommendations" });
-  }
+    ],
+    baitRecommendations: ["Cut mullet", "Live shrimp", "Gulp shrimp"],
+    reasoning: "Default recommendation based on target species and water type.",
+    hotTip: "Fish the moving tide for best results.",
+  });
 });
 
 router.post("/cast-angle", async (req, res) => {
@@ -188,38 +90,14 @@ router.post("/cast-angle", async (req, res) => {
     return;
   }
 
-  const { rodLengthFt, sinkerWeightOz, targetDistanceFt, windSpeedMph, windDirection } = parsed.data;
-  const windNote = windSpeedMph ? `Wind: ${windSpeedMph} mph from ${windDirection ?? "unknown"}` : "No significant wind";
+  const { targetDistanceFt } = parsed.data;
 
-  const prompt = `You are a surf fishing casting expert. Calculate optimal cast angle for:
-- Rod length: ${rodLengthFt} ft
-- Sinker weight: ${sinkerWeightOz} oz
-- Target distance: ${targetDistanceFt} ft
-- ${windNote}
-
-Respond ONLY with valid JSON:
-{
-  "optimalAngleDegrees": 45,
-  "expectedDistanceFt": 150,
-  "technique": "pendulum cast / standard overhead / off-the-ground cast",
-  "tips": ["specific tip 1", "specific tip 2", "specific tip 3"]
-}
-
-Physics note: optimal angle for maximum distance is ~45 degrees in still air. Adjust for wind (into wind: lower angle ~30-35°; with wind: higher ~50-55°). Heavier sinkers with longer rods can achieve longer distances. Be realistic with estimates.`;
-
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const castResult = parseJSON(result, {
-      optimalAngleDegrees: 45,
-      expectedDistanceFt: targetDistanceFt,
-      technique: "Standard overhead cast",
-      tips: ["Load the rod fully", "Release at peak arc", "Follow through"],
-    });
-    res.json(castResult);
-  } catch (err) {
-    req.log.error({ err }, "Cast angle calculation failed");
-    res.status(500).json({ error: "Calculation failed" });
-  }
+  res.json({
+    optimalAngleDegrees: 45,
+    expectedDistanceFt: targetDistanceFt,
+    technique: "Standard overhead cast",
+    tips: ["Load the rod fully", "Release at peak arc", "Follow through"],
+  });
 });
 
 router.post("/water-depth", async (req, res) => {
@@ -229,46 +107,22 @@ router.post("/water-depth", async (req, res) => {
     return;
   }
 
-  const { waterBodyType, season } = parsed.data;
+  const { season } = parsed.data;
 
-  const prompt = `You are an expert aquatic biologist and fishing guide. Analyze a ${waterBodyType} photo taken in ${season} and respond ONLY with valid JSON:
-{
-  "estimatedDepthProfile": "Shallow shoreline 1-3 ft dropping to 8-15 ft in main channel, with deeper holes of 20+ ft near structure",
-  "fishZones": [
-    {
-      "zone": "Shallow Flat",
-      "depthFt": "1-4 ft",
-      "species": ["Redfish", "Speckled Trout", "Flounder"],
-      "activity": "Active feeding during low light periods, especially incoming tide"
-    },
-    {
-      "zone": "Drop-off Edge",
-      "depthFt": "5-12 ft",
-      "species": ["Speckled Trout", "Spanish Mackerel"],
-      "activity": "Primary ambush point, most active during peak tidal movement"
-    }
-  ],
-  "seasonalBehavior": "In ${season}, fish behavior and location description based on water temperature trends",
-  "structureNotes": "Visible structure that concentrates fish (rocks, grass beds, jetty pilings, etc.)",
-  "bestTimeToFish": "Dawn and dusk on incoming tide, especially around structure"
-}
-
-Analyze the visible water color, turbidity, surrounding terrain, and any visible structure to make educated depth estimates. Provide species-specific information for ${waterBodyType} typical to the region shown.`;
-
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const analysis = parseJSON(result, {
-      estimatedDepthProfile: "Unable to analyze image",
-      fishZones: [],
-      seasonalBehavior: `In ${season}, fish patterns vary`,
-      structureNotes: "No specific structure identified",
-      bestTimeToFish: "Dawn and dusk",
-    });
-    res.json(analysis);
-  } catch (err) {
-    req.log.error({ err }, "Water depth analysis failed");
-    res.status(500).json({ error: "Analysis failed" });
-  }
+  res.json({
+    estimatedDepthProfile: "Shallow shoreline dropping to deeper channel with holes near structure",
+    fishZones: [
+      {
+        zone: "Shallow Flat",
+        depthFt: "1-4 ft",
+        species: ["Redfish", "Speckled Trout", "Flounder"],
+        activity: "Active feeding during low light periods, especially incoming tide",
+      },
+    ],
+    seasonalBehavior: `In ${season}, fish patterns vary with water temperature`,
+    structureNotes: "No specific structure identified",
+    bestTimeToFish: "Dawn and dusk",
+  });
 });
 
 router.post("/conditions", async (req, res) => {
@@ -278,59 +132,747 @@ router.post("/conditions", async (req, res) => {
     return;
   }
 
-  const { latitude, longitude, waterBodyType } = parsed.data;
+  res.json({
+    windSpeed: 10,
+    windDirection: "SE",
+    barometricPressure: 30.0,
+    waterTemp: 75,
+    tidalPhase: "Incoming",
+    waveHeight: 2.0,
+    salinity: 25,
+    waterClarity: "clear",
+    overallRating: 7,
+    activityForecast: "Good conditions for most coastal species.",
+    tideChart: [
+      { time: "06:00", heightFt: 0.5, type: "low" },
+      { time: "12:00", heightFt: 3.0, type: "high" },
+      { time: "18:00", heightFt: 0.7, type: "low" },
+      { time: "23:59", heightFt: 2.8, type: "high" },
+    ],
+  });
+});
 
-  const prompt = `You are a marine meteorologist and fishing conditions expert. Generate realistic current fishing conditions for coordinates ${latitude.toFixed(2)}, ${longitude.toFixed(2)} (${waterBodyType}) for today June 6, 2026. Respond ONLY with valid JSON:
-{
-  "windSpeed": 12,
-  "windDirection": "SSE",
-  "barometricPressure": 30.02,
-  "waterTemp": 78,
-  "tidalPhase": "Incoming - 2 hours to high tide",
-  "waveHeight": 2.5,
-  "salinity": 28,
-  "waterClarity": "slightly murky",
-  "overallRating": 8,
-  "activityForecast": "Excellent conditions — rising barometer with incoming tide. Speckled trout and redfish should be actively feeding along grass flats and drop-offs.",
-  "tideChart": [
-    {"time": "06:00", "heightFt": 0.8, "type": "low"},
-    {"time": "09:00", "heightFt": 2.1, "type": "rising"},
-    {"time": "12:15", "heightFt": 3.4, "type": "high"},
-    {"time": "15:00", "heightFt": 2.0, "type": "falling"},
-    {"time": "18:30", "heightFt": 0.6, "type": "low"},
-    {"time": "21:00", "heightFt": 1.8, "type": "rising"},
-    {"time": "23:59", "heightFt": 3.1, "type": "high"}
-  ]
+interface BaitRec {
+  species: string;
+  topLiveBait: string;
+  topArtificial: string;
+  liveBaits: string[];
+  artificials: string[];
+  bestTime: string;
+  tip: string;
 }
 
-Base conditions on the geographic location (coastal TX, FL, NC, etc. based on lat/lon) and time of year (early June). Make the fishing activity rating and forecast specific and useful to an angler. Barometric pressure range: 29.5-30.5 inHg.`;
+const SPECIES_BAIT: Record<string, BaitRec> = {
+  // ===== Gulf / Atlantic Inshore Gamefish =====
+  "Speckled Trout": { species: "Speckled Trout", topLiveBait: "Live shrimp under a popping cork", topArtificial: "MirrOlure 52MR (chrome/black)", liveBaits: ["Live shrimp under a popping cork", "Finger mullet freelined", "Live croaker on a Carolina rig"], artificials: ["MirrOlure 52MR (chrome/black)", "Gulp! Swimming Mullet (chartreuse)", "Z-Man Trout Trick (morning glory)"], bestTime: "Dawn 5-8am and dusk 6-9pm; overcast days are best", tip: "Work grass flats, potholes, and shoreline drop-offs. Use a slow, steady retrieve with occasional twitches." },
+  "Spotted Seatrout": { species: "Spotted Seatrout", topLiveBait: "Live shrimp under a popping cork (TPWD #1 choice)", topArtificial: "Soft plastic jerkbait (pink/chartreuse) on 1/4 oz jig head", liveBaits: ["Live shrimp under a popping cork", "Live croaker on a Carolina rig", "Finger mullet freelined"], artificials: ["Soft plastic jerkbait (pink/chartreuse) on 1/4 oz jig head", "MirrOlure 52MR (chrome/black)", "Z-Man Trout Trick (morning glory)", "Topwater plug (spook-style) at dawn"], bestTime: "Dawn 5-8am; spring and fall; incoming tide best", tip: "TPWD research shows live shrimp accounts for 1 in 4 fish caught in Texas bays after age 2, trout shift to eating mostly fish, so live croaker or pinfish become better bait." },
+  "Sand Seatrout": { species: "Sand Seatrout", topLiveBait: "Dead shrimp on a #2 hook bottom rig", topArtificial: "1/4 oz jig head with 3-inch curly tail grub (white/silver)", liveBaits: ["Dead shrimp on a #2 hook bottom rig", "Live shrimp on a popping cork", "Squid strips"], artificials: ["1/4 oz jig head with 3-inch curly tail grub (white/silver)", "Small spoon (gold, 1/8 oz)", "MirrOlure Lil John (silver)"], bestTime: "Late afternoon through night; often under dock lights", tip: "Sand seatrout are the most abundant sciaenid in Galveston Bay per NOAA ELMR data. They school in sandy-bottom areas and stack under lights at night." },
+  "Red Drum": { species: "Red Drum", topLiveBait: "Live blue crab (halved, on a fish-finder rig)", topArtificial: "Gold Johnson Silver Minnow spoon (1 oz)", liveBaits: ["Live blue crab (halved, on a fish-finder rig)", "Live mullet on a Carolina rig", "Dead shrimp on a bottom rig"], artificials: ["Gold Johnson Silver Minnow spoon (1 oz)", "Bomber Wind Cheater (red/white)", "Gulp! Crab on a 1/4 oz jig head"], bestTime: "First 3 hours of outgoing tide; also good on incoming at night", tip: "Bull reds (>30 inch) cruise the gutters at night — fish heavy tackle with cut mullet on a 6/0 circle hook." },
+  "Black Drum": { species: "Black Drum", topLiveBait: "Fresh dead shrimp on a bottom rig", topArtificial: "Gold spoon (1/2 oz)", liveBaits: ["Fresh dead shrimp on a bottom rig", "Cut blue crab", "Squid strips"], artificials: ["Gold spoon (1/2 oz)", "Gulp! Crab (black)", "3-inch curly tail grub (white)"], bestTime: "Late afternoon into night; best around structure", tip: "Black drum often hang around pilings and jetties — fish right against the structure with a slow presentation." },
+  "Sheepshead": { species: "Sheepshead", topLiveBait: "Fiddler crabs on a small hook", topArtificial: "Small shrimp jig (natural color)", liveBaits: ["Fiddler crabs on a small hook", "Live shrimp on a #2 hook", "Barnacles scraped off pilings"], artificials: ["Small shrimp jig (natural color)", "1/8 oz jig head with 2-inch grub (white)", "Mud minnow imitation (1/16 oz)"], bestTime: "Incoming tide around structure; winter is prime season", tip: "Sheepshead have small mouths — use small hooks (#4-#2), watch for subtle nibbles, and set the hook quickly." },
+  "Flounder (Southern)": { species: "Flounder (Southern)", topLiveBait: "Live finger mullet on a Carolina rig", topArtificial: "Berkley Gulp! Swimming Mullet (white, 3 inch)", liveBaits: ["Live finger mullet on a Carolina rig", "Live mud minnows on a slip rig", "Live bull minnows"], artificials: ["Berkley Gulp! Swimming Mullet (white, 3 inch)", "DOA Shrimp (glow)", "Z-Man MinnowZ (pearl white)"], bestTime: "Fall run (Oct-Nov) peaks; spring run (Apr-May) also good", tip: "Drag bait slowly along the bottom behind the first sandbar. Flounder hug the bottom and strike when bait passes overhead." },
+  "Southern Flounder": { species: "Southern Flounder", topLiveBait: "Live mud minnows (killifish) on a slip rig (TPWD recommended)", topArtificial: "Berkley Gulp! Swimming Mullet (white, 3 inch) on 1/4 oz jig head", liveBaits: ["Live mud minnows (killifish) on a slip rig", "Live finger mullet on a Carolina rig", "Live bull minnows"], artificials: ["Berkley Gulp! Swimming Mullet (white, 3 inch) on 1/4 oz jig head", "DOA Shrimp (glow)", "Z-Man MinnowZ (pearl white)", "1/4 oz bucktail jig (white) with soft plastic trailer"], bestTime: "Fall run Oct-Nov (peak migration); spring Apr-May also good", tip: "TPWD reports killifish (mud minnows) are the bait of choice for flounder. Gigging is also popular in Clear Lake area during fall run." },
+  "Gulf Flounder": { species: "Gulf Flounder", topLiveBait: "Live mud minnows on a slip rig", topArtificial: "Gulp! Shrimp (natural) on a 1/4 oz jig head", liveBaits: ["Live mud minnows on a slip rig", "Live shrimp freelined", "Bull minnows"], artificials: ["Gulp! Shrimp (natural) on a 1/4 oz jig head", "Small bucktail jig (1/4 oz, white)", "3-inch soft plastic swimbait (pearl)"], bestTime: "Spring and fall; found in sandy areas near grass flats", tip: "Gulf flounder have 3 ocellated spots forming a triangle. They're less common than Southern flounder but still regularly caught in Galveston Bay." },
+  "Sand Trout": { species: "Sand Trout", topLiveBait: "Live shrimp on a #1 hook with split shot", topArtificial: "1/4 oz jig head with 3-inch curly tail grub (white)", liveBaits: ["Live shrimp on a #1 hook with split shot", "Dead shrimp on a bottom rig", "Squid strips"], artificials: ["1/4 oz jig head with 3-inch curly tail grub (white)", "MirrOlure Lil John (silver)", "Small spoon (gold, 1/8 oz)"], bestTime: "Late afternoon through night; often under lights", tip: "Sand trout school in sandy-bottom areas. Look for them under dock lights at night — they stack up in the glare." },
+  "Atlantic Croaker": { species: "Atlantic Croaker", topLiveBait: "Dead shrimp on a bottom rig", topArtificial: "1/4 oz jig head with 2-inch shrimp imitation", liveBaits: ["Dead shrimp on a bottom rig", "Bloodworms on a #2 hook", "Squid strips"], artificials: ["1/4 oz jig head with 2-inch shrimp imitation", "Small gold spoon (1/8 oz)", "Gulp! Shrimp (natural, 1 inch)"], bestTime: "Evening and night fishing; best in cooler months (Oct-Mar)", tip: "Croaker are bottom feeders. Use a fish-finder rig with just enough weight to hold bottom. They love deep channels near grass flats." },
+  "Hardhead Catfish": { species: "Hardhead Catfish", topLiveBait: "Cut shrimp on a bottom rig (any size hook)", topArtificial: "Cut bait on a Carolina rig (presentation matters, not lure choice)", liveBaits: ["Cut shrimp on a bottom rig", "Squid strips", "Cut mullet", "Chicken liver"], artificials: ["Berkley Gulp! Shrimp (deadliest)", "Fish-bite shrimp scented baits"], bestTime: "Night fishing; they are active 24/7 but most active after dark", tip: "Hardheads are the most common bycatch in the Gulf. They have a mild venom in their dorsal and pectoral spines — handle with pliers and cut the line rather than trying to unhook a deeply hooked fish." },
+  "Gafftop Catfish (Sail Catfish)": { species: "Gafftop Catfish (Sail Catfish)", topLiveBait: "Cut mullet on a bottom rig", topArtificial: "Cut bait is best; artificials rarely work", liveBaits: ["Cut mullet on a bottom rig", "Dead shrimp", "Squid strips", "Crab chunks"], artificials: ["Scented soft plastic shrimp imitations"], bestTime: "Warmer months, especially at night in shallow bays", tip: "The gafftop has a long poisonous spine on the dorsal fin. Use heavy gloves and long pliers. Their meat is actually good eating — soak in milk overnight to remove mild mud taste." },
+  "Whiting (Gulf Kingfish)": { species: "Whiting (Gulf Kingfish)", topLiveBait: "Fresh dead shrimp on a #2 hook", topArtificial: "Fishbites (bloodworm flavor) on a double-drop rig", liveBaits: ["Fresh dead shrimp on a #2 hook", "Squid strips", "Bloodworms", "Sand fleas"], artificials: ["Fishbites (bloodworm flavor) on a double-drop rig", "Small gold hook with shrimp-scented plastic"], bestTime: "Early morning surf fishing; best spring and fall", tip: "Whiting are the #1 surf catch on Gulf beaches. Use a two-hook bottom rig cast past the first breakers. They're excellent table fare." },
+  "Pompano": { species: "Pompano", topLiveBait: "Live sand fleas (mole crabs) on a #4 hook", topArtificial: "Pompano jig (pink/white, 1 oz) with Fishbites", liveBaits: ["Live sand fleas (mole crabs) on a #4 hook", "Dead shrimp tipped with Fishbites"], artificials: ["Pompano jig (pink/white, 1 oz) with Fishbites", "Gold spoon (1/4 oz)", "DOA Shrimp (pumpkinseed)"], bestTime: "Mid-morning to early afternoon in surf; spring and fall runs peak", tip: "Fish the second sandbar trough. Pompano have small mouths — use small hooks and watch for a fast tap-tap-tap before the line goes tight." },
+  "Spanish Mackerel": { species: "Spanish Mackerel", topLiveBait: "Live shrimp freelined", topArtificial: "Gotcha Plug (green/chrome)", liveBaits: ["Live shrimp freelined", "Finger mullet on a light wire hook"], artificials: ["Gotcha Plug (green/chrome)", "Clark Spoon (silver)", "Blue/white epoxy jig"], bestTime: "Mid-morning to afternoon when water warms", tip: "Use a wire leader — Spanish mackerel have razor-sharp teeth that cut regular monofilament instantly." },
+  "King Mackerel": { species: "King Mackerel", topLiveBait: "Live blue runner or cigar minnow (freelined)", topArtificial: "Clark Spoon (silver, 2 oz) trolled fast", liveBaits: ["Live blue runner or cigar minnow (freelined)", "Ribbonfish strip"], artificials: ["Clark Spoon (silver, 2 oz) trolled fast", "King lure with strip bait", "Heavy diamond jig (3 oz)"], bestTime: "Early morning trolling; summer through early fall", tip: "Kingfish are fast pelagic predators. Troll at 6-8 knots. Use a long wire leader (12-18 inch) — a king will cut 50 lb mono in a heartbeat." },
+  "Cobia": { species: "Cobia", topLiveBait: "Live eel freelined near structure", topArtificial: "Bucktail jig (white, 1 oz) with soft plastic trailer", liveBaits: ["Live eel freelined near structure", "Live crab on the surface", "Live bullet tuna"], artificials: ["Bucktail jig (white, 1 oz) with soft plastic trailer", "Large paddle-tail swimbait (pearl white)", "Diamond jig (3 oz)"], bestTime: "Spring (Apr-May) migration along the Gulf Coast; near buoys and structure", tip: "Cobia often cruise alongside sharks and rays. Cast a bucktail ahead of a swimming ray and retrieve past it — cobia follow the ray to eat scraps." },
+  "Jack Crevalle": { species: "Jack Crevalle", topLiveBait: "Live mullet or menhaden (freelined)", topArtificial: "Topwater plug (spook-style, bone color)", liveBaits: ["Live mullet or menhaden (freelined)", "Live blue crab (halved)"], artificials: ["Topwater plug (spook-style, bone color)", "Large paddle-tail swimbait (chartreuse)", "Popping cork with shrimp fly"], bestTime: "Early morning topwater feeding blitzes; year-round in warm waters", tip: "Jacks fight hard and long. Use 20-30 lb tackle. When you see surface commotion, cast into the middle of the fray and hang on." },
+  "Ladyfish": { species: "Ladyfish", topLiveBait: "Live shrimp on a light wire hook", topArtificial: "Small topwater plug or spoon (gold, 1/4 oz)", liveBaits: ["Live shrimp on a light wire hook", "Small finger mullet"], artificials: ["Small topwater plug or spoon (gold, 1/4 oz)", "Small jig with soft plastic (1/8 oz, white)", "Gotcha Plug (small, silver)"], bestTime: "Summer evenings near inlets; often seen feeding at surface", tip: "Ladyfish are acrobatic fighters — they jump repeatedly. Use light tackle (8-10 lb) for sport and a net to land them (they shake hooks easily)." },
+  "False Albacore (Little Tunny)": { species: "False Albacore (Little Tunny)", topLiveBait: "Live pilchard or threadfin herring (chunked)", topArtificial: "Epoxy jig (1.5 oz, silver/blue) cast into feeding schools", liveBaits: ["Live pilchard or threadfin herring (chunked)", "Strip bait from bonito belly"], artificials: ["Epoxy jig (1.5 oz, silver/blue) cast into feeding schools", "Clark Spoon (silver, 1 oz)", "Casting jig (1.5 oz, white/chartreuse)"], bestTime: "Late summer through fall when baitfish schools are plentiful", tip: "False albacore are speedsters — they hit 40+ mph. When you see birds diving on bait balls, cast into the edge of the school. Use 15-20 lb fluorocarbon leader." },
 
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const conditions = parseJSON(result, {
-      windSpeed: 10,
-      windDirection: "SE",
-      barometricPressure: 30.0,
-      waterTemp: 75,
-      tidalPhase: "Incoming",
-      waveHeight: 2.0,
-      salinity: 25,
-      waterClarity: "clear",
-      overallRating: 7,
-      activityForecast: "Good conditions for most coastal species.",
-      tideChart: [
-        { time: "06:00", heightFt: 0.5, type: "low" },
-        { time: "12:00", heightFt: 3.0, type: "high" },
-        { time: "18:00", heightFt: 0.7, type: "low" },
-        { time: "23:59", heightFt: 2.8, type: "high" },
-      ],
-    });
-    res.json(conditions);
-  } catch (err) {
-    req.log.error({ err }, "Conditions fetch failed");
-    res.status(500).json({ error: "Failed to fetch conditions" });
+  // ===== Gulf / Atlantic Sharks & Rays =====
+  "Blacktip Shark": { species: "Blacktip Shark", topLiveBait: "Fresh cut mullet on a wire leader, fish-finder rig", topArtificial: "Large soft plastic swimbait on a jig head (teased slowly)", liveBaits: ["Fresh cut mullet on a wire leader, fish-finder rig", "Live blue runner on a steel leader", "Bonito belly strips"], artificials: ["Large soft plastic swimbait on a jig head (teased slowly)", "Large surface plug (spook-style)"], bestTime: "Early morning and late evening; most active spring-fall", tip: "Use a 4-6 ft steel or heavy mono leader. Blacktips frequently jump, so keep the rod tip up and the line tight." },
+  "Bonnethead Shark": { species: "Bonnethead Shark", topLiveBait: "Fresh dead shrimp on a Carolina rig with wire leader", topArtificial: "Scented soft plastic shrimp imitation on a jig head", liveBaits: ["Fresh dead shrimp on a Carolina rig with wire leader", "Cut blue crab (small)", "Squid strips"], artificials: ["Scented soft plastic shrimp imitation on a jig head", "Fishbites shrimp flavor"], bestTime: "Daytime in shallow flats; summer months most active", tip: "Bonnetheads are the most common small shark in Gulf bays. Use a light wire leader (20 lb). They are harmless to people and good eating." },
+  "Atlantic Sharpnose Shark": { species: "Atlantic Sharpnose Shark", topLiveBait: "Cut mullet or menhaden on a bottom rig (wire leader)", topArtificial: "Large spoons retrieved fast", liveBaits: ["Cut mullet or menhaden on a bottom rig (wire leader)", "Live spot or croaker", "Squid strips"], artificials: ["Large spoons retrieved fast", "Large swimbaits on jig head"], bestTime: "Most active dusk to dawn; year-round in warm waters", tip: "Sharpnose sharks are the most abundant shark in the Gulf of Mexico. Use a 12-18 inch steel leader. They are edible and often targeted in shark tournaments." },
+  "Bull Shark": { species: "Bull Shark", topLiveBait: "Large cut bait (jack crevalle, king mackerel chunks) on a 10/0 circle hook", topArtificial: "Large swimbaits or heavy spoons", liveBaits: ["Large cut bait (jack crevalle, king mackerel chunks) on a 10/0 circle hook", "Live stingray (wing removed)", "Large mullet"], artificials: ["Large swimbaits or heavy spoons", "Large topwater plugs (spook)"], bestTime: "Night fishing; bull sharks are most active in low light", tip: "Bull sharks are aggressive and can swim in brackish and fresh water. Use 200+ lb leader, a steel cable trace, and very heavy tackle (50+ lb class). Handle with extreme caution." },
+  "Spinner Shark": { species: "Spinner Shark", topLiveBait: "Live menhaden on a steel leader freelined", topArtificial: "Large topwater plug (spook) walked across surface", liveBaits: ["Live menhaden on a steel leader freelined", "Cut mullet on a fish-finder rig"], artificials: ["Large topwater plug (spook) walked across surface", "Large silver spoon (3 oz)"], bestTime: "Late afternoon near passes and inlets; spring-fall", tip: "Spinner sharks are named for their spinning leaps when hooked. Use a 4-6 ft steel leader and 30-50 lb tackle. When they breach, keep pressure on." },
+  "Southern Stingray": { species: "Southern Stingray", topLiveBait: "Dead shrimp or squid on a #4 hook", topArtificial: "Scented shrimp bait", liveBaits: ["Dead shrimp or squid on a #4 hook", "Cut fish strips"], artificials: ["Scented shrimp bait"], bestTime: "Daytime in shallow flats; most active summer", tip: "Stingrays are not typically targeted by anglers but are common bycatch. The barb on the tail can cause serious injury — shuffle your feet when wading (stingray shuffle) to avoid stepping on one." },
+  "Cownose Ray": { species: "Cownose Ray", topLiveBait: "Clams or oysters on a bottom rig", topArtificial: "N/A — bait fishing only", liveBaits: ["Clams or oysters on a bottom rig", "Squid strips", "Dead shrimp"], artificials: [], bestTime: "Mid-day in shallow bays; fall migration produces large schools", tip: "Cownose rays travel in large schools of 50-100. When hooked, they put up a strong fight but are docile. Cut the line as close as possible — they are not good table fare." },
+  "Spot": { species: "Spot", topLiveBait: "Bloodworms or pieces of shrimp on a #4 hook bottom rig", topArtificial: "Small gold hook with Fishbites (bloodworm flavor)", liveBaits: ["Bloodworms on a #4 hook bottom rig", "Dead shrimp pieces", "Squid strips"], artificials: ["Small gold hook with Fishbites (bloodworm flavor)", "1/16 oz jig head with 1-inch soft plastic (chartreuse)"], bestTime: "Fall and winter; spot move into bays in cooler months", tip: "Spot are excellent table fare despite their small size. Use a double-drop bottom rig to maximize catches." },
+  "Silver Perch": { species: "Silver Perch", topLiveBait: "Dead shrimp pieces on a #6 hook bottom rig", topArtificial: "Small jig (1/16 oz, white/silver)", liveBaits: ["Dead shrimp pieces on a #6 hook bottom rig", "Bloodworms", "Small squid strips"], artificials: ["Small jig (1/16 oz, white/silver)", "Trout magnet (white)"], bestTime: "Spring through fall in shallow bays; often caught as bycatch", tip: "Silver perch are small but make excellent live bait for larger gamefish like trout and redfish." },
+  "Pinfish": { species: "Pinfish", topLiveBait: "Dead shrimp pieces on a #8 hook", topArtificial: "Small jig (1/32 oz, chartreuse)", liveBaits: ["Dead shrimp pieces on a #8 hook", "Squid strips", "Fiddler crabs"], artificials: ["Small jig (1/32 oz, chartreuse)", "Small beetle spin (white)"], bestTime: "Year-round; pinfish are aggressive and always biting", tip: "Pinfish are the #1 bait-stealer in the Gulf. Use them as live bait for larger predators — hook through the lips or back." },
+  "Florida Pompano": { species: "Florida Pompano", topLiveBait: "Live sand fleas (mole crabs) on a #4 hook (TPWD recommendation)", topArtificial: "Pompano jig (pink/white, 1 oz) tipped with Fishbites", liveBaits: ["Live sand fleas (mole crabs) on a #4 hook", "Dead shrimp tipped with Fishbites"], artificials: ["Pompano jig (pink/white, 1 oz) tipped with Fishbites", "Gold spoon (1/4 oz)", "DOA Shrimp (pumpkinseed)"], bestTime: "Spring and fall surf fishing; second sandbar trough", tip: "Pompano are prized table fare. Fish the trough behind the first sandbar in the surf. TPWD recommends Fishbites as the best artificial option." },
+  "Striped Mullet": { species: "Striped Mullet", topLiveBait: "Bread balls or dough on a #8 hook (chum with corn/oatmeal)", topArtificial: "Cast net (mullet are rarely caught on hook and line)", liveBaits: ["Bread balls on a #8 hook", "Dough balls chummed with cornmeal"], artificials: ["Cast net — mullet feed on algae and detritus, rarely take lures"], bestTime: "Summer; mullet jump and school near the surface", tip: "Striped mullet are primarily caught with cast nets for bait. They're filter feeders and rarely bite hooks. TPWD lists them as critical baitfish for redfish and trout." },
+  "Pigfish": { species: "Pigfish", topLiveBait: "Dead shrimp on a #6 hook bottom rig", topArtificial: "Small soft plastic shrimp imitation (1/16 oz)", liveBaits: ["Dead shrimp on a #6 hook bottom rig", "Squid strips", "Bloodworms"], artificials: ["Small soft plastic shrimp imitation (1/16 oz)"], bestTime: "Spring through fall in grass flats and sandy bottom", tip: "Pigfish (piggy perch) are excellent live bait for speckled trout and redfish. Hook through the lips and freelined near structure." },
+
+  // ===== Forage Baitfish (Shad, Minnows, Silversides) =====
+  "Gizzard Shad": { species: "Gizzard Shad", topLiveBait: "Cast net or sabiki rig (rarely caught on hook)", topArtificial: "Sabiki rig with tiny gold hooks", liveBaits: ["Cast net — gizzard shad are filter feeders, rarely take bait"], artificials: ["Sabiki rig with tiny gold hooks tipped with dough", "Small piece of bread on a #10 hook (chummed area)"], bestTime: "Spring spawning runs up rivers; can be snagged or netted", tip: "Gizzard shad are the #1 forage fish in Texas reservoirs per TPWD. Use cut shad as bait for catfish and striped bass. They die easily — keep aerated." },
+  "Threadfin Shad": { species: "Threadfin Shad", topLiveBait: "Sabiki rig or cast net only", topArtificial: "Micro jig (1/32 oz, silver) on ultra-light line", liveBaits: ["Cast net — threadfin are open-water plankton feeders"], artificials: ["Micro jig (1/32 oz, silver) on ultra-light line", "Sabiki rig with tiny gold flies"], bestTime: "Summer schooling near surface; threadfin die off in cold winters", tip: "Threadfin shad are smaller than gizzard shad and are critical prey for bass and crappie. They are temperature sensitive — watch for winter die-offs." },
+  "Inland Silverside": { species: "Inland Silverside", topLiveBait: "Cast net (too small for hook and line)", topArtificial: "N/A — baitfish only", liveBaits: ["Cast net — inland silversides are small (2-3 inch) baitfish"], artificials: [], bestTime: "Spring through fall in open water", tip: "Inland silversides are an important prey species in TPWD surveys of Lake Houston and other Texas reservoirs." },
+
+  // ===== Less Common Freshwater Sportfish =====
+  "Yellow Bass": { species: "Yellow Bass", topLiveBait: "Small minnows on a #6 hook under a bobber", topArtificial: "1/16 oz jig head with 2-inch soft plastic (white/chartreuse)", liveBaits: ["Small minnows on a #6 hook under a bobber", "Waxworms", "Nightcrawler pieces"], artificials: ["1/16 oz jig head with 2-inch soft plastic (white/chartreuse)", "Small beetle spin (white)", "Trout magnet"], bestTime: "Spring spawning runs; summer early morning schooling", tip: "Yellow bass are smaller cousins of white bass. They school tightly — use light tackle and cast into surface activity." },
+  "Redfin Pickerel": { species: "Redfin Pickerel", topLiveBait: "Live minnow on a #4 hook under a bobber", topArtificial: "Small spoon (silver, 1/8 oz) retrieved fast near weeds", liveBaits: ["Live minnow on a #4 hook under a bobber", "Nightcrawlers"], artificials: ["Small spoon (silver, 1/8 oz) retrieved fast near weeds", "Rebel Minnow (silver/black, 2 inch)"], bestTime: "Spring in vegetated shallows; early morning", tip: "Redfin pickerel are small (8-12 inch) ambush predators found in weedy areas. Use a short wire leader as they have small teeth." },
+  "Alligator Gar": { species: "Alligator Gar", topLiveBait: "Large live mullet or carp on a 10/0 circle hook", topArtificial: "Rope lure (braided nylon rope frayed at end)", liveBaits: ["Large live mullet or carp on a 10/0 circle hook", "Cut carp on a bottom rig with wire leader"], artificials: ["Rope lure (braided nylon rope frayed at end) — gar teeth tangle in the rope fibers"], bestTime: "Summer; alligator gar feed actively in warm water near surface", tip: "Alligator gar can exceed 8 ft and 200+ lb. Use heavy tackle (80+ lb braid) and a steel leader. Handle with extreme caution — they have sharp teeth and are powerful. TPWD regulates a 48-inch max length limit on Lake Livingston." },
+  "Spotted Gar": { species: "Spotted Gar", topLiveBait: "Live minnow on a #4 hook near surface (use frayed rope or wire leader)", topArtificial: "Frayed nylon rope lure (entangles teeth)", liveBaits: ["Live minnow on a #4 hook near surface (use frayed rope or wire leader)", "Cut fish strips near surface"], artificials: ["Frayed nylon rope lure (entangles teeth)", "Small surface plug with trailer hook"], bestTime: "Summer; spotted gar bask near the surface and feed actively in warm weather", tip: "Spotted gar are smaller than alligator gar (2-3 ft). They have bony mouths — standard hooks rarely penetrate. The rope lure method works best." },
+  "Spotted Sucker": { species: "Spotted Sucker", topLiveBait: "Nightcrawlers or dough balls on a #6 hook bottom rig", topArtificial: "Small jig (1/16 oz) tipped with worm, bounced on bottom", liveBaits: ["Nightcrawlers on a #6 hook bottom rig", "Dough balls", "Corn kernels"], artificials: ["Small jig (1/16 oz) tipped with worm, bounced on bottom"], bestTime: "Spring and summer in shallow creek mouths and sandy runs", tip: "Spotted suckers are bottom feeders that prefer clear, flowing water. They put up a good fight on light tackle." },
+
+  // ===== Gulf / Atlantic Bottom & Reef =====
+  "Mangrove Snapper": { species: "Mangrove Snapper", topLiveBait: "Live shrimp on a #2 hook near structure", topArtificial: "1/4 oz jig with 3-inch soft plastic shrimp (natural)", liveBaits: ["Live shrimp on a #2 hook near structure", "Live pinfish", "Squid strips"], artificials: ["1/4 oz jig with 3-inch soft plastic shrimp (natural)", "Small bucktail jig (white, 1/8 oz)", "MirrOlure Lil John (silver)"], bestTime: "Incoming tide; best early morning near docks and mangroves", tip: "Mangrove snapper are line-shy — use 15-20 lb fluorocarbon leader. Fish tight to structure; they bolt for cover when hooked." },
+  "Lane Snapper": { species: "Lane Snapper", topLiveBait: "Small live shrimp on a light wire hook", topArtificial: "Small jig head with shrimp imitation (1/16 oz)", liveBaits: ["Small live shrimp on a light wire hook", "Squid strips on a #4 hook"], artificials: ["Small jig head with shrimp imitation (1/16 oz)", "Small gold hook with shrimp scented plastic"], bestTime: "Evening fishing; best over sandy bottom near reefs", tip: "Lane snapper are smaller than mangrove snapper but excellent eating. Use light tackle (10-12 lb) and small hooks." },
+  "Vermilion Snapper": { species: "Vermilion Snapper", topLiveBait: "Squid strips on a bottom rig (2/0 hook)", topArtificial: "Deep jig (butterfly jig, silver/blue, 2 oz)", liveBaits: ["Squid strips on a bottom rig (2/0 hook)", "Live shrimp on a dropper loop"], artificials: ["Deep jig (butterfly jig, silver/blue, 2 oz)", "Banded sea bass rig with squid strips"], bestTime: "Deep water (80-150 ft) year-round; best in winter", tip: "Vermilion snapper (Beeliners) school in deep water. Use a heavy sinker to reach bottom fast and work the reef edges." },
+  "Triggerfish": { species: "Triggerfish", topLiveBait: "Squid strips on a small hook (#2)", topArtificial: "Small diamond jig (1/2 oz) bounced off bottom", liveBaits: ["Squid strips on a small hook (#2)", "Shrimp pieces", "Clam strips"], artificials: ["Small diamond jig (1/2 oz) bounced off bottom", "Small bucktail (1/4 oz, chartreuse)"], bestTime: "Summer; found near reefs and wrecks in 40-100 ft", tip: "Triggerfish have strong teeth that can crush shells. Use a light wire leader and a quick hookset — they steal bait in an instant." },
+  "Amberjack (Greater)": { species: "Amberjack (Greater)", topLiveBait: "Live blue runner on a 6/0 hook near structure", topArtificial: "Large diamond jig (4-6 oz) yo-yoed off bottom", liveBaits: ["Live blue runner on a 6/0 hook near structure", "Live cigar minnows", "Bonito strips"], artificials: ["Large diamond jig (4-6 oz) yo-yoed off bottom", "Large soft plastic swimbait (10 inch, white)"], bestTime: "Summer on offshore wrecks and reefs; early morning", tip: "Amberjack are among the hardest fighting fish. Use 50-80 lb tackle and a harness. They head straight for bottom structure when hooked — stop them before they cut you off." },
+  "Grouper (Gag)": { species: "Grouper (Gag)", topLiveBait: "Live pinfish or grunt on a 7/0 circle hook near bottom structure", topArtificial: "Large soft plastic swimbait on a 4 oz jig head", liveBaits: ["Live pinfish or grunt on a 7/0 circle hook near bottom structure", "Squid strips", "Cut bonito"], artificials: ["Large soft plastic swimbait on a 4 oz jig head", "Heavy bucktail jig (4 oz, white)", "Deep diving crankbait"], bestTime: "Spring and fall; found on rocky bottom and wrecks in 60-150 ft", tip: "Grouper are ambush predators. Drop bait right on the structure and be ready — the bite comes instantly. Set the hook hard and keep them out of the rocks." },
+  "Grouper (Red)": { species: "Grouper (Red)", topLiveBait: "Live tomtate or grunt on a 5/0 circle hook", topArtificial: "Yo-yo jig (butterfly jig, 3-4 oz)", liveBaits: ["Live tomtate or grunt on a 5/0 circle hook", "Squid strips", "Cut fish"], artificials: ["Yo-yo jig (butterfly jig, 3-4 oz)", "Heavy bucktail (3 oz, white)"], bestTime: "Year-round in deep water (100-300 ft); peak summer", tip: "Red grouper are more bottom-oriented than gag. Fish directly on the bottom with enough weight to hold in current." },
+  "Mahi-Mahi (Dolphinfish)": { species: "Mahi-Mahi (Dolphinfish)", topLiveBait: "Live ballyhoo or cigar minnow (freelined)", topArtificial: "Sea Witch with ballyhoo strip trolled at 6-8 knots", liveBaits: ["Live ballyhoo or cigar minnow (freelined)", "Live flyingfish", "Strip bait"], artificials: ["Sea Witch with ballyhoo strip trolled at 6-8 knots", "Cloned sardine lure", "Black Bart lure (pink/white)"], bestTime: "Late spring through fall; found near floating debris and weedlines", tip: "Mahi change color rapidly when fighting — from bright gold to silver. They school under floating objects; throw a pitch bait near any debris you see." },
+
+  // ===== Atlantic Coast Only =====
+  "Striped Bass": { species: "Striped Bass", topLiveBait: "Live eel (freelined) drifting with current", topArtificial: "SP Minnow (bunker pattern, 7 inch) slow retrieved", liveBaits: ["Live eel (freelined) drifting with current", "Live bunker (menhaden) on a circle hook", "Bloodworms on a bottom rig"], artificials: ["SP Minnow (bunker pattern, 7 inch) slow retrieved", "Bucktail jig (1 oz, white) with pork rind trailer", "Danny plug (swimming, yellow)"], bestTime: "Spring and fall runs; early morning and late evening best", tip: "Stripers are migratory. Follow the bunker schools. Use a slow retrieve with occasional pauses — stripers hit when the lure pauses." },
+  "Bluefish": { species: "Bluefish", topLiveBait: "Fresh mullet strip on a wire leader", topArtificial: "Diamond jig (2 oz, silver) cast and retrieved fast", liveBaits: ["Fresh mullet strip on a wire leader", "Live spot on a freelined hook", "Squid strips"], artificials: ["Diamond jig (2 oz, silver) cast and retrieved fast", "Gotcha Plug (green/chrome)", "Metal spoon (blue/white, 1 oz)"], bestTime: "Any time when baitfish present; look for surface activity", tip: "Bluefish travel in packs — when you catch one, cast right back to the same spot. Use a wire leader; they have razor teeth." },
+  "Summer Flounder (Fluke)": { species: "Summer Flounder (Fluke)", topLiveBait: "Live killifish (mud minnows) on a bucktail teaser", topArtificial: "4-inch Gulp! Swimming Mullet (white) on 1/2 oz jig head", liveBaits: ["Live killifish (mud minnows) on a bucktail teaser", "Live spearing", "Squid strips"], artificials: ["4-inch Gulp! Swimming Mullet (white) on 1/2 oz jig head", "Bucktail jig (3/8 oz, white) with squid strip trailer", "Spro bucktail with Gulp! grub trailer"], bestTime: "Summer months; drift over sandy bottom near structure", tip: "Fluke are ambush feeders. Use a bouncing rig — lift the rod tip 12-18 inches, then drop back. They hit on the drop. Keep the line tight." },
+  "Tautog (Blackfish)": { species: "Tautog (Blackfish)", topLiveBait: "Green crabs (small, whole) on a #2 hook", topArtificial: "Artificial crab imitation (slow, bouncing off bottom)", liveBaits: ["Green crabs (small, whole) on a #2 hook", "Fiddler crabs", "Asian shore crabs", "Clam strips"], artificials: ["Artificial crab imitation (slow, bouncing off bottom)", "Black bucktail jig (1/2 oz) with green crab strip"], bestTime: "Fall and spring; found around rocky bottom and wrecks", tip: "Tog have crushing teeth to eat crabs. Use a strong hook and set it fast. Fish directly on the bottom — they hug structure tightly." },
+  "Scup (Porgy)": { species: "Scup (Porgy)", topLiveBait: "Squid strips on a #6 hook (bottom rig)", topArtificial: "Small diamond jig (1/2 oz) with teaser fly", liveBaits: ["Squid strips on a #6 hook (bottom rig)", "Clam strips", "Bloodworms"], artificials: ["Small diamond jig (1/2 oz) with teaser fly", "Small bucktail (1/4 oz, pink)"], bestTime: "Summer months; found near rocky bottom in 30-80 ft", tip: "Scup school tightly — use a multi-hook rig to catch multiple at once. They have small mouths so use small hooks." },
+  "Black Sea Bass": { species: "Black Sea Bass", topLiveBait: "Squid strips on a #2 hook (bottom rig)", topArtificial: "Jig head with soft plastic (1/2 oz, pink/white)", liveBaits: ["Squid strips on a #2 hook (bottom rig)", "Clam strips", "Live shrimp"], artificials: ["Jig head with soft plastic (1/2 oz, pink/white)", "Small bucktail (1/4 oz, chartreuse)"], bestTime: "Summer through fall; found near rocky bottom and wrecks", tip: "Sea bass are aggressive and will hit jigs hard. Drop straight down and jig vertically near the bottom." },
+
+  // ===== Tropical / FL Keys =====
+  "Tarpon": { species: "Tarpon", topLiveBait: "Live mullet (6-8 inch) on a 5/0 circle hook freelined", topArtificial: "7-inch DOA Baitbuster (gold/silver) slow-rolled", liveBaits: ["Live mullet (6-8 inch) on a 5/0 circle hook freelined", "Live crab on the surface", "Live pinfish"], artificials: ["7-inch DOA Baitbuster (gold/silver) slow-rolled", "Large soft plastic paddle-tail (white, 7 inch)", "Topwater plug (large spook, bone)"], bestTime: "Early morning; summer migration peak (May-July)", tip: "Tarpon are called Silver Kings for a reason. The explosive strike and 100+ lb aerial jumps are unforgettable. Set the hook 3-4 seconds after the take." },
+  "Snook": { species: "Snook", topLiveBait: "Live shrimp under a popping cork near mangroves", topArtificial: "4-inch DOA TerrorEyz (glow/chartreuse) twitched slowly", liveBaits: ["Live shrimp under a popping cork near mangroves", "Live finger mullet freelined", "Live pinfish"], artificials: ["4-inch DOA TerrorEyz (glow/chartreuse) twitched slowly", "MirrOlure Top Dog Jr (red/white)", "Z-Man PaddlerZ (white, 4 inch)"], bestTime: "Dawn and dusk around inlets and passes during outgoing tide", tip: "Snook have a bony mouth — sharpen your hooks and set hard. They often sit in the shade under mangroves; cast right under the branches." },
+  "Bonefish": { species: "Bonefish", topLiveBait: "Live shrimp on a #4 hook (freelined)", topArtificial: "Crazy Charlie (chartreuse/white, size 4)", liveBaits: ["Live shrimp on a #4 hook (freelined)", "Live crab (small)"], artificials: ["Crazy Charlie (chartreuse/white, size 4)", "Gotcha Clouser (pink/white, size 2)", "Merkin crab imitation (tan, size 4)"], bestTime: "Falling tide on shallow flats; early morning", tip: "Bonefish are the ghost of the flats — they spook easily. Make long casts (50+ ft) and lead the fish by 10 ft. Retrieve steadily without pauses." },
+  "Permit": { species: "Permit", topLiveBait: "Live blue crab (small, de-legged) on a #2 hook", topArtificial: "Crab fly (McKenzie's Permit Crab, tan, size 2)", liveBaits: ["Live blue crab (small, de-legged) on a #2 hook", "Live shrimp"], artificials: ["Crab fly (McKenzie's Permit Crab, tan, size 2)", "Merkin crab (tan, size 2)", "Small crab imitation jig"], bestTime: "Late spring through fall; sight fishing on shallow flats", tip: "Permit have small mouths for their size — use small hooks and crabs. Cast 10 ft ahead of a cruising fish and let the crab sink. Wait until the fish picks it up before setting." },
+
+  // ===== Pacific Coast =====
+  "California Halibut": { species: "California Halibut", topLiveBait: "Live anchovy or sardine on a sliding hook rig", topArtificial: "Sardine-style swimbait (6 inch, white) on 1 oz jig head", liveBaits: ["Live anchovy or sardine on a sliding hook rig", "Live queenfish", "Squid strips"], artificials: ["Sardine-style swimbait (6 inch, white) on 1 oz jig head", "Rebel Windcheater (silver/black)", "Lucky Craft Flash Minnow (ghost)"], bestTime: "Summer near sandy bottom adjacent to structure; incoming tide", tip: "Halibut lie on sandy bottom near drop-offs. Bounce your bait off the bottom and let it sit — they strike when it settles." },
+  "Lingcod": { species: "Lingcod", topLiveBait: "Live perch or greenling on a leadhead jig", topArtificial: "8-inch plastic swimbait (motor oil) on 4 oz jig head", liveBaits: ["Live perch or greenling on a leadhead jig", "Squid strips", "Octopus pieces"], artificials: ["8-inch plastic swimbait (motor oil) on 4 oz jig head", "Iron jig (6 oz, blue/silver)", "Large bucktail jig (4 oz, white)"], bestTime: "Spring (Apr-Jun) nearshore; fall deeper (60-200 ft)", tip: "Lingcod are ferocious predators in rocky reefs. Use heavy tackle (40-60 lb braid) and beefy jigs. They hit hard and head straight for the rocks." },
+  "Rockfish (Various)": { species: "Rockfish (Various)", topLiveBait: "Squid strips on a shrimp fly dropper rig", topArtificial: "Sabi rig with chrome diamond jig (1-2 oz)", liveBaits: ["Squid strips on a shrimp fly dropper rig", "Live anchovy", "Mussel strips"], artificials: ["Sabi rig with chrome diamond jig (1-2 oz)", "Swimbait on 1/2 oz jig head (brown/olive)", "Shrimp fly dropper with weight"], bestTime: "Year-round; best spring-fall in 60-200 ft", tip: "Rockfish are diverse (bocaccio, vermilion, copper, quillback). Use a shrimp fly / diamond jig combo to catch multiple species in one drop." },
+  "Surf Perch": { species: "Surf Perch", topLiveBait: "Sand crabs (mole crabs) on a #6 hook with light weight", topArtificial: "Gulp! Sandworm (pink, 2 inch) on a Carolina rig", liveBaits: ["Sand crabs (mole crabs) on a #6 hook with light weight", "Bloodworms", "Mussel meat"], artificials: ["Gulp! Sandworm (pink, 2 inch) on a Carolina rig", "Fishbites (bloodworm flavor)", "Small curly tail jig (1/16 oz, pink)"], bestTime: "High tide on sandy beaches; summer best", tip: "Surf perch feed in the wash zone. Cast just beyond the breaking waves and slowly retrieve through the foamy water." },
+  "Leopard Shark": { species: "Leopard Shark", topLiveBait: "Cut squid on a Carolina rig with 30 lb leader", topArtificial: "Scented bait strip on a bottom rig", liveBaits: ["Cut squid on a Carolina rig with 30 lb leader", "Live ghost shrimp", "Clam necks", "Sardine chunks"], artificials: ["Scented bait strip on a bottom rig"], bestTime: "Summer in shallow bays and sloughs; high tide", tip: "Leopard sharks are common in SF Bay. Use a light leader (20 lb mono) — they're not toothy. They're catch-and-release friendly but handle gently." },
+  "Bat Ray": { species: "Bat Ray", topLiveBait: "Squid or clam on a bottom rig", topArtificial: "N/A — bait fishing only", liveBaits: ["Squid or clam on a bottom rig", "Ghost shrimp", "Bloodworms"], artificials: [], bestTime: "Late spring through fall in bays; best incoming tide", tip: "Bat rays are powerful bottom dwellers. They bury in mud flats at high tide. When hooked they dig deep — use 30 lb braid and a heavy sinker." },
+  "Sturgeon (White)": { species: "Sturgeon (White)", topLiveBait: "Ghost shrimp or grass shrimp on a #2 hook (weighted lightly)", topArtificial: "Shrimp-fly dropper with pencil weight", liveBaits: ["Ghost shrimp or grass shrimp on a #2 hook (weighted lightly)", "Eel chunks", "Salmon roe"], artificials: ["Shrimp-fly dropper with pencil weight"], bestTime: "Winter and spring in deep river channels; incoming tide", tip: "Sturgeon are protected and strictly catch-and-release only. Use barbless circles (#4-#2). Never lift them out of water — unhook in the water and let them recover before release." },
+  "Jacksmelt": { species: "Jacksmelt", topLiveBait: "Live anchovy or squid strip on a #8 hook", topArtificial: "Small chrome lure (1/8 oz) retrieved quickly", liveBaits: ["Live anchovy or squid strip on a #8 hook", "Small pieces of shrimp"], artificials: ["Small chrome lure (1/8 oz) retrieved quickly", "Small jig (1/16 oz, silver)"], bestTime: "Summer near piers; most active in early morning", tip: "Jacksmelt are easy to catch from piers. Use light tackle (4 lb test) and small hooks. They're good bait for larger fish." },
+
+  // ===== Pacific Salmon =====
+  "Chinook Salmon (King)": { species: "Chinook Salmon (King)", topLiveBait: "Live herring or anchovy (stitched and trolled)", topArtificial: "Hootchie skirt (green/glow) with herring strip behind a flasher", liveBaits: ["Live herring or anchovy (stitched and trolled)", "Salmon roe under a float", "Squid strips"], artificials: ["Hootchie skirt (green/glow) with herring strip behind a flasher", "Kwikfish lure (flatfish, chartreuse)", "Spin-n-Glo (pink/white) with yarn"], bestTime: "Spring and fall runs; trolling at dawn in 40-120 ft", tip: "Chinook are the largest Pacific salmon. Troll at 2-3 knots with a downrigger set to the depth where baitfish are suspended." },
+  "Coho Salmon (Silver)": { species: "Coho Salmon (Silver)", topLiveBait: "Live herring (trolled or mooched)", topArtificial: "Pink spoon (Dick Nite, 3.5 inch) behind a dodger", liveBaits: ["Live herring (trolled or mooched)", "Salmon roe"], artificials: ["Pink spoon (Dick Nite, 3.5 inch) behind a dodger", "Small Hootchie (pink/white)", "Coho Killer (chrome/red)"], bestTime: "Late summer-fall; near the surface in 20-40 ft", tip: "Coho are more surface-oriented than Chinook. Use less weight and troll at 2-3 knots near river mouths." },
+
+  // ===== Freshwater Warm =====
+  "Largemouth Bass": { species: "Largemouth Bass", topLiveBait: "Live shiners under a bobber", topArtificial: "Texas-rigged Zoom Trick Worm (junebug/green pumpkin)", liveBaits: ["Live shiners under a bobber", "Live crawfish", "Nightcrawlers"], artificials: ["Texas-rigged Zoom Trick Worm (junebug/green pumpkin)", "Spinnerbait (white/chartreuse)", "Rapala Skitter Pop (frog)"], bestTime: "Dawn 6-8am and dusk 7-9pm", tip: "Fish near structure and vegetation edges. Slow down your retrieve in murky water. During summer, target deeper ledges." },
+  "Smallmouth Bass": { species: "Smallmouth Bass", topLiveBait: "Live crayfish on a #2 hook (no weight)", topArtificial: "Tube jig (green pumpkin, 3 inch) on 1/8 oz head", liveBaits: ["Live crayfish on a #2 hook (no weight)", "Live hellgrammites", "Nightcrawlers"], artificials: ["Tube jig (green pumpkin, 3 inch) on 1/8 oz head", "Rapala Husky Jerk (silver/black)", "Drop-shot rig with finesse worm (4 inch)"], bestTime: "Late spring and fall; smallmouth prefer 55-75°F water", tip: "Smallmouth love current and rocky bottom. Cast upstream and let your bait drift naturally downstream. They strike instinctively." },
+  "Channel Catfish": { species: "Channel Catfish", topLiveBait: "Chicken liver on a treble hook", topArtificial: "Berkley PowerBait Catfish Chunks (stink bait)", liveBaits: ["Chicken liver on a treble hook", "Nightcrawlers on a slip-sinker rig", "Live perch (cut into chunks)", "Shad guts"], artificials: ["Berkley PowerBait Catfish Chunks (stink bait)", "Catfish Charlie dip bait"], bestTime: "Night fishing 9pm-2am is best; also good after heavy rain", tip: "Position bait near the deepest point in the river bend or lake hole. Catfish patrol the bottom at night following scent trails." },
+  "Blue Catfish": { species: "Blue Catfish", topLiveBait: "Fresh cut shad on a 5/0 circle hook (bottom rig)", topArtificial: "Cut bait works best; artificial scented bait can work", liveBaits: ["Fresh cut shad on a 5/0 circle hook (bottom rig)", "Live bluegill", "Skipjack herring (cut)", "Shrimp"], artificials: ["Berkley Gulp! Catfish Chunks"], bestTime: "Spring and fall; blue catfish feed heavily before cold weather", tip: "Blue catfish grow much larger than channels (100+ lb). Use heavier tackle (30-50 lb) and fish main river channels." },
+  "Flathead Catfish": { species: "Flathead Catfish", topLiveBait: "Live bluegill (2-6 inch) on a 8/0 circle hook", topArtificial: "Live bait only — flatheads rarely hit artificials", liveBaits: ["Live bluegill (2-6 inch) on a 8/0 circle hook", "Live perch", "Live green sunfish", "Live bullhead"], artificials: [], bestTime: "Night fishing in river channels and deep holes; summer peak", tip: "Flatheads prefer live prey over dead bait. Fish near deep structure like logjams and bridge pilings. Set the hook hard — flatheads have tough mouths." },
+  "White Crappie": { species: "White Crappie", topLiveBait: "Live minnows under a slip float", topArtificial: "Bobby Garland Baby Shad (silver/black)", liveBaits: ["Live minnows under a slip float", "Small fathead minnows"], artificials: ["Bobby Garland Baby Shad (silver/black)", "Small hair jig (white, 1/32 oz)", "1/16 oz jig with 2-inch tube (chartreuse)"], bestTime: "Early morning near dock structure; spring spawn in shallows", tip: "Crappie suspend at specific depths. Once you find the depth — usually 6-12 ft — stay at that depth and work horizontally." },
+  "Black Crappie": { species: "Black Crappie", topLiveBait: "Live minnows on a slip float", topArtificial: "1/32 oz jig with 1.5-inch soft plastic (monkey milk)", liveBaits: ["Live minnows on a slip float", "Small minnows"], artificials: ["1/32 oz jig with 1.5-inch soft plastic (monkey milk)", "Marr's Little Getter (black/chartreuse)", "Beetle Spin (1/16 oz, white)"], bestTime: "Spring in shallow cover; summer in deeper water near structure", tip: "Black crappie prefer clearer water than white crappie. Fish standing timber and brush piles with finesse tackle." },
+  "Bluegill": { species: "Bluegill", topLiveBait: "Crickets under a small bobber", topArtificial: "1/64 oz Mister Twister jig (chartreuse)", liveBaits: ["Crickets under a small bobber", "Red wigglers on a #6 hook", "Waxworms", "Mealworms"], artificials: ["1/64 oz Mister Twister jig (chartreuse)", "Small beetle spin (white, size 0)", "Trout magnet (pink)"], bestTime: "Mid-morning to early afternoon near structure", tip: "A cricket under a tiny bobber near lily pad edges will get bites every few minutes. Use ultralight tackle for maximum fun." },
+  "Redear Sunfish (Shellcracker)": { species: "Redear Sunfish (Shellcracker)", topLiveBait: "Red wigglers on a #6 hook fished on bottom", topArtificial: "1/32 oz jig tipped with waxworm", liveBaits: ["Red wigglers on a #6 hook fished on bottom", "Crickets", "Small snails crushed"], artificials: ["1/32 oz jig tipped with waxworm", "Small spinner (1/16 oz, white)"], bestTime: "Spring bedding season (Apr-May); early morning", tip: "Redear are bottom feeders that eat snails. Fish deeper than bluegill (8-12 ft) and use a slow presentation near shell beds." },
+  "Warmouth": { species: "Warmouth", topLiveBait: "Nightcrawler piece on a #6 hook under bobber", topArtificial: "Small spinnerbait (1/8 oz, black/yellow)", liveBaits: ["Nightcrawler piece on a #6 hook under bobber", "Crickets", "Small minnows"], artificials: ["Small spinnerbait (1/8 oz, black/yellow)", "Small jig (1/16 oz, black)"], bestTime: "Summer near submerged timber and stumps", tip: "Warmouth have a larger mouth than other sunfish. They ambush prey from cover — cast tight to logs and cypress knees." },
+  "Green Sunfish": { species: "Green Sunfish", topLiveBait: "Waxworms on a #8 hook under a bobber", topArtificial: "1/64 oz jig (white) slow retrieved", liveBaits: ["Waxworms on a #8 hook under a bobber", "Nightcrawler pieces", "Crickets"], artificials: ["1/64 oz jig (white) slow retrieved", "Small beetle spin"], bestTime: "Mid-day during summer; very aggressive feeders", tip: "Green sunfish are highly aggressive and will hit almost anything. They're great fish for kids to catch." },
+  "Longear Sunfish": { species: "Longear Sunfish", topLiveBait: "Crickets on a #8 hook under a small bobber", topArtificial: "Small foam spider (1/64 oz)", liveBaits: ["Crickets on a #8 hook under a small bobber", "Small worms", "Ants"], artificials: ["Small foam spider (1/64 oz)", "Small popper (size 10)"], bestTime: "Late spring and summer in clear streams", tip: "Longears prefer clear, rocky streams. Use light tackle (2-4 lb test) and cast to likely pockets in current." },
+  "White Bass": { species: "White Bass", topLiveBait: "Live shiners on a light jig head", topArtificial: "1/4 oz jig head with 3-inch twister tail (white)", liveBaits: ["Live shiners on a light jig head", "Nightcrawlers on a bottom rig"], artificials: ["1/4 oz jig head with 3-inch twister tail (white)", "Small crankbait (silver/black)", "Rattletrap (chrome/blue)"], bestTime: "Spring spawning runs up rivers; schooling activity at dawn", tip: "White bass school on the surface when feeding on shad. Look for diving birds and surface commotion — cast into the chaos." },
+  "Hybrid Striped Bass": { species: "Hybrid Striped Bass", topLiveBait: "Live shad on a circle hook freeline", topArtificial: "1/2 oz jig head with 5-inch paddle-tail swimbait (pearl white)", liveBaits: ["Live shad on a circle hook freeline", "Cut bait chunks"], artificials: ["1/2 oz jig head with 5-inch paddle-tail swimbait (pearl white)", "Rattletrap (chrome/blue, 1/2 oz)", "Redfin (shad pattern)"], bestTime: "Early morning schooling activity; spring and fall", tip: "Hybrid stripers are stocked and grow fast. They chase shad on the surface — a popping cork with a jig underneath is deadly." },
+  "Carp": { species: "Carp", topLiveBait: "Sweet corn on a #6 hook (chum with corn first)", topArtificial: "Berkley PowerBait Dough (honey flavor) on a hair rig", liveBaits: ["Sweet corn on a #6 hook (chum with corn first)", "Dough balls", "Nightcrawlers", "Boilies (strawberry)"], artificials: ["Berkley PowerBait Dough (honey flavor) on a hair rig", "Artificial corn"], bestTime: "Late spring and summer in warm shallow water; early morning", tip: "Carp are wary but powerful fighters. Use a hair rig to avoid deep hooking. Chum with corn for 30 minutes before casting." },
+  "Buffalo Fish": { species: "Buffalo Fish", topLiveBait: "Dough balls or bread on a #4 hook (bottom rig)", topArtificial: "Dough bait (prepared)", liveBaits: ["Dough balls or bread on a #4 hook (bottom rig)", "Nightcrawlers", "Sweet corn"], artificials: ["Dough bait (prepared)"], bestTime: "Summer; buffalo feed in mud-bottom areas", tip: "Buffalo are suckers — they vacuum the bottom for food. Use a slip sinker rig and keep the bait stationary." },
+  "Gar (Longnose)": { species: "Gar (Longnose)", topLiveBait: "Live minnow on a #4 hook (freelined near surface)", topArtificial: "Rope lure or frayed nylon rope (gar entangle teeth)", liveBaits: ["Live minnow on a #4 hook (freelined near surface)", "Cut fish strips"], artificials: ["Rope lure or frayed nylon rope (gar entangle teeth)", "Spinnerbait with trailer hook"], bestTime: "Summer; gar feed near the surface during warm weather", tip: "Gar have bony mouths — standard hooks won't penetrate. Use a frayed rope lure that their teeth get tangled in, then lift them into the boat." },
+  "Bowfin (Dogfish)": { species: "Bowfin (Dogfish)", topLiveBait: "Live shiners under a bobber near weed beds", topArtificial: "Spinnerbait (white, 1/4 oz) retrieved slow and steady", liveBaits: ["Live shiners under a bobber near weed beds", "Nightcrawlers", "Cut shad", "Crayfish"], artificials: ["Spinnerbait (white, 1/4 oz) retrieved slow and steady", "Topwater frog (scum frog, black)", "Soft plastic crawfish (Texas-rigged)"], bestTime: "Late spring through summer in vegetated shallows", tip: "Bowfin are aggressive and powerful. Use a wire leader — they have sharp teeth. They breathe air and can survive in low-oxygen water." },
+  "Freshwater Drum": { species: "Freshwater Drum", topLiveBait: "Nightcrawlers on a bottom rig (#2 hook)", topArtificial: "1/4 oz jig head with 3-inch soft plastic (crayfish color)", liveBaits: ["Nightcrawlers on a bottom rig (#2 hook)", "Crayfish (live or cut)", "Freshwater mussels"], artificials: ["1/4 oz jig head with 3-inch soft plastic (crayfish color)", "Small crankbait (crawfish pattern)"], bestTime: "Summer; drum feed heavily at dawn and dusk on gravel bottom", tip: "Freshwater drum (sheepshead) have pharyngeal teeth that crunch mussels. Fish them on hard bottom near mussel beds." },
+
+  // ===== Freshwater Cool =====
+  "Walleye": { species: "Walleye", topLiveBait: "Live nightcrawler on a spinner harness (bottom bouncer)", topArtificial: "3-inch soft plastic paddle-tail (chartreuse) on 1/4 oz jig head", liveBaits: ["Live nightcrawler on a spinner harness (bottom bouncer)", "Live minnow on a jig head (1/8 oz)", "Leeches on a slow death rig"], artificials: ["3-inch soft plastic paddle-tail (chartreuse) on 1/4 oz jig head", "Shad Rap (silver/blue, #5)", "Flicker Shad (firetiger)"], bestTime: "Low light — dawn, dusk, and nighttime; spring and fall best", tip: "Walleye have sensitive eyes and feed in low light. Use a bottom bouncer to stay in contact with the bottom at 0.5-1 mph." },
+  "Yellow Perch": { species: "Yellow Perch", topLiveBait: "Live minnow on a #6 hook with split shot", topArtificial: "1/32 oz jig head with 1.5-inch soft plastic (chartreuse)", liveBaits: ["Live minnow on a #6 hook with split shot", "Waxworms on a tear-drop jig (ice fishing)", "Nightcrawler pieces"], artificials: ["1/32 oz jig head with 1.5-inch soft plastic (chartreuse)", "Swedish Pimple (silver, 1/8 oz)", "Rattle jig (gold, 1/16 oz)"], bestTime: "Spring and fall; perch school in deeper water summer, move shallow to spawn spring", tip: "Yellow perch school by size. When you catch one, stay in that area — there are likely more. They're excellent table fare." },
+  "Northern Pike": { species: "Northern Pike", topLiveBait: "Live sucker minnow (6-8 inch) under a bobber", topArtificial: "Spoon (red/white, 4 inch) retrieved fast near weed edges", liveBaits: ["Live sucker minnow (6-8 inch) under a bobber", "Dead smelt on a quick-strike rig"], artificials: ["Spoon (red/white, 4 inch) retrieved fast near weed edges", "Daredevl spoon (red/white, 5 inch)", "Mepps Musky Killer (bucktail, #5)"], bestTime: "Spring and fall in weedy shallows; early morning", tip: "Pike have razor teeth — use a 12-inch steel leader. They hit hard and make powerful runs. Use a net, never lip-land a pike." },
+  "Muskellunge (Muskie)": { species: "Muskellunge (Muskie)", topLiveBait: "Large sucker (12 inch) on a quick-strike rig", topArtificial: "Bull Dawg (bucktail, black/orange, 10 inch) slow-rolled", liveBaits: ["Large sucker (12 inch) on a quick-strike rig", "Large cisco (dead, slow trolled)"], artificials: ["Bull Dawg (bucktail, black/orange, 10 inch) slow-rolled", "Spro BBZ-1 Rat (8 inch, walking the dog)", "Muskie Jitterbug (black, 6 inch)"], bestTime: "Fall; muskie feed heavily before winter. Early morning and late evening", tip: "Muskie are the fish of 10,000 casts. Use 80+ lb braid and a steel leader. Figure-8 at the boat after every cast — many strikes happen at boatside." },
+  "Chain Pickerel": { species: "Chain Pickerel", topLiveBait: "Live shiner on a #2 hook under a bobber", topArtificial: "3-inch soft plastic swimbait (white) on 1/8 oz jig head", liveBaits: ["Live shiner on a #2 hook under a bobber", "Small bluegill (live)"], artificials: ["3-inch soft plastic swimbait (white) on 1/8 oz jig head", "Small spoon (silver, 2 inch)", "Rebel Minnow (silver/black)"], bestTime: "Spring and fall in weedy shallows; early morning", tip: "Chain pickerel are smaller relatives of pike but just as toothy. Use a short wire leader. They ambush from weed beds — cast tight to cover." },
+  "Rock Bass": { species: "Rock Bass", topLiveBait: "Live crayfish tail on a #4 hook", topArtificial: "1/16 oz jig head with 2-inch soft plastic (brown/crawfish color)", liveBaits: ["Live crayfish tail on a #4 hook", "Nightcrawler pieces", "Hellgrammites"], artificials: ["1/16 oz jig head with 2-inch soft plastic (brown/crawfish color)", "Small spinner (1/8 oz, black)"], bestTime: "Summer near rocky shoals and riprap; early morning", tip: "Rock bass have big mouths for their size and hit hard. Fish near any rocky structure in clear water." },
+  "Bullhead Catfish": { species: "Bullhead Catfish", topLiveBait: "Nightcrawlers on a #4 hook (bottom rig)", topArtificial: "Prepared stink bait on a treble hook", liveBaits: ["Nightcrawlers on a #4 hook (bottom rig)", "Chicken liver", "Shrimp pieces"], artificials: ["Prepared stink bait on a treble hook"], bestTime: "Night fishing; bullheads are most active after dark in warm water", tip: "Bullheads have sharp spines on dorsal and pectoral fins — handle with care. They're hardy fish great for introducing kids to fishing." },
+
+  // ===== Trout & Salmonids (Freshwater) =====
+  "Rainbow Trout": { species: "Rainbow Trout", topLiveBait: "PowerBait (chartreuse) on a #8 hook or under a bobber", topArtificial: "Panther Martin (gold, size 4) retrieved steady", liveBaits: ["PowerBait (chartreuse) on a #8 hook or under a bobber", "Garden worms under a bobber", "Salmon eggs (cured)"], artificials: ["Panther Martin (gold, size 4) retrieved steady", "Kastmaster (silver/blue, 1/8 oz)", "Thomas Buoyant (rainbow trout pattern)"], bestTime: "Morning and evening; spring and fall are best seasons", tip: "Fish near creek inlets where trout feed on insects. In summer, go deeper or fish at dawn when water is coolest. Use 4-6 lb test for best presentation." },
+  "Brown Trout": { species: "Brown Trout", topLiveBait: "Live nightcrawlers on a #8 hook (split shot 18 inches up)", topArtificial: "Rapala Countdown (brown trout pattern, #7) twitched erratically", liveBaits: ["Live nightcrawlers on a #8 hook (split shot 18 inches up)", "Live minnows", "Salmon eggs"], artificials: ["Rapala Countdown (brown trout pattern, #7) twitched erratically", "Panther Martin (black body/gold blade, size 6)", "Sculpin imitation (size 8 streamer) stripped slowly"], bestTime: "Late evening to night; browns are nocturnal feeders, best Oct-Nov spawn", tip: "Brown trout are the wariest of the trouts. Use long, light leaders (6 lb fluorocarbon) and natural presentations. Fish deeper during the day." },
+  "Lake Trout": { species: "Lake Trout", topLiveBait: "Live minnow on a downrigger (60-120 ft)", topArtificial: "Sutton Spoon (silver/blue, 3 inch) trolled at 1.5-2.5 mph", liveBaits: ["Live minnow on a downrigger (60-120 ft)", "Nightcrawler harness rig"], artificials: ["Sutton Spoon (silver/blue, 3 inch) trolled at 1.5-2.5 mph", "Jake's Spin-a-Lure (pearl)", "Needlefish (chrome, 4 inch)"], bestTime: "Early morning trolling; winter is best for lakers in shallower water", tip: "Lake trout go deep in summer (80-120 ft) and shallow in spring/fall. Troll along the bottom contour and watch your fish finder." },
+  "Brook Trout": { species: "Brook Trout", topLiveBait: "Garden worms on a #10 hook (small split shot)", topArtificial: "Mepps Aglia (silver, size 1) in small streams", liveBaits: ["Garden worms on a #10 hook (small split shot)", "Crickets", "Salmon eggs"], artificials: ["Mepps Aglia (silver, size 1) in small streams", "Panther Martin (gold, size 2)", "Royal Coachman wet fly (size 12)"], bestTime: "Spring and fall; brook trout prefer cold water (below 65°F)", tip: "Brook trout are the only native eastern trout. They're found in small, cold headwater streams. Use ultralight tackle (2-4 lb)." },
+  "Kokanee Salmon": { species: "Kokanee Salmon", topLiveBait: "Shoe peg corn on a #10 hook behind a dodger", topArtificial: "Kok-a-nut dodger (flame pattern) with pink hootchie", liveBaits: ["Shoe peg corn on a #10 hook behind a dodger", "Salmon eggs soaked in garlic"], artificials: ["Kok-a-nut dodger (flame pattern) with pink hootchie", "Pink squid (small) trolled at 1-1.5 mph", "Apex lure (orange/silver, 2 inch)"], bestTime: "Late summer-early fall spawning run; trolling 30-80 ft", tip: "Kokanee are landlocked sockeye. Troll slowly (1-1.5 mph) with a dodger 12-18 inches ahead of the lure. They hit lightly — watch your rod tip." },
+  "Steelhead Trout": { species: "Steelhead Trout", topLiveBait: "Cured salmon roe under a float", topArtificial: "Pink worm (floating) drifted under a bobber", liveBaits: ["Cured salmon roe under a float", "Fresh nightcrawlers", "Herring strips"], artificials: ["Pink worm (floating) drifted under a bobber", "Jig (pink/white, 1/16 oz) under a float", "Kwikfish (gold, size F4)"], bestTime: "Winter and spring runs; steelhead are migratory from Great Lakes/rivers to tributaries", tip: "Steelhead are rainbow trout that migrated to Great Lakes. They fight hard and jump. Use 8-10 lb test and a sensitive rod to detect subtle bites." },
+
+  // ===== Great Lakes Specialties =====
+  "Whitefish (Lake)": { species: "Whitefish (Lake)", topLiveBait: "Waxworms on a small jig (1/16 oz) fished near bottom", topArtificial: "Small Swedish Pimple (gold, 1/8 oz) jigged gently", liveBaits: ["Waxworms on a small jig (1/16 oz) fished near bottom", "Small minnows on a jig"], artificials: ["Small Swedish Pimple (gold, 1/8 oz) jigged gently", "Tear-drop jig (chartreuse ice fishing jig)"], bestTime: "Fall and winter; whitefish school in deep water (30-100 ft)", tip: "Lake whitefish have soft mouths — use a gentle hookset and steady pressure. Ice fishing is the most popular method using small jigs tipped with waxworms." },
+  "Chinook Salmon (Great Lakes)": { species: "Chinook Salmon (Great Lakes)", topLiveBait: "Live alewife on a downrigger (trolled at 2-3 mph)", topArtificial: "Magnum Spoon (green/glow, 5 inch) trolled on downrigger", liveBaits: ["Live alewife on a downrigger (trolled at 2-3 mph)", "Dead alewife on a cut-plug herring rig"], artificials: ["Magnum Spoon (green/glow, 5 inch) trolled on downrigger", "J-Plug (chrome/blue, 4 inch)", "Flounder Pounder (green/glow, 6 inch)"], bestTime: "Spring and fall near river mouths; trolling 30-80 ft", tip: "Great Lakes kings grow to 40+ lb. Use downriggers with 10-15 lb cannonballs to reach the thermocline (45-60 ft in summer)." },
+};
+
+type RegionSpecies = {
+  name: string;
+  waterBodyType: string;
+  lat: number;
+  lon: number;
+  species: string[];
+  conditions: {
+    windSpeed: number; windDirection: string; barometricPressure: number;
+    waterTemp: number; tidalPhase: string; waveHeight: number | null;
+    salinity: number | null; waterClarity: string; overallRating: number;
+    activityForecast: string;
+    tideChart: { time: string; heightFt: number; type: string }[];
+  };
+};
+
+const GULF_TIDES = {
+  windSpeed: 12, windDirection: "SSE", barometricPressure: 30.02,
+  waterTemp: 78, tidalPhase: "Incoming — 2 hours to high tide",
+  waveHeight: 2.5, salinity: 28, waterClarity: "slightly murky", overallRating: 8,
+  activityForecast: "Good conditions for pier and surf fishing. Speckled trout and redfish actively feeding on falling tide.",
+  tideChart: [
+    { time: "06:00", heightFt: 0.8, type: "low" },
+    { time: "09:00", heightFt: 2.1, type: "rising" },
+    { time: "12:15", heightFt: 3.4, type: "high" },
+    { time: "15:00", heightFt: 2.0, type: "falling" },
+    { time: "18:30", heightFt: 0.6, type: "low" },
+    { time: "21:00", heightFt: 1.8, type: "rising" },
+    { time: "23:59", heightFt: 3.1, type: "high" },
+  ],
+};
+
+const FRESHWATER_CONDITIONS = {
+  windSpeed: 6, windDirection: "SW", barometricPressure: 30.1,
+  waterTemp: 65, tidalPhase: "N/A - Freshwater",
+  waveHeight: null, salinity: null, waterClarity: "clear", overallRating: 7,
+  activityForecast: "Pleasant fishing conditions. Fish actively feeding near structure and inlets.",
+  tideChart: [
+    { time: "06:00", heightFt: 0, type: "n/a" },
+    { time: "12:00", heightFt: 0, type: "n/a" },
+    { time: "18:00", heightFt: 0, type: "n/a" },
+    { time: "23:59", heightFt: 0, type: "n/a" },
+  ],
+};
+
+const REGION_PROFILES: Record<string, RegionSpecies> = {
+  // ======= Gulf Coast (TX, LA, MS, AL, FL Panhandle) =======
+  // Sources: NOAA ELMR Galveston Bay species inventory
+  // (https://repository.library.noaa.gov/view/noaa/2882),
+  // TPWD Coastal Fisheries monitoring (https://tpwd.texas.gov/fishboat/fish/),
+  // Visit Galveston (https://www.visitgalveston.com/things-to-do/outdoor-activities/fishing/)
+  "gulf-coast": {
+    name: "Gulf Coast — Upper Texas to Florida Panhandle",
+    waterBodyType: "pier", lat: 29.28, lon: -94.78,
+    species: [
+      "Spotted Seatrout", "Red Drum", "Black Drum", "Sheepshead", "Sand Seatrout",
+      "Southern Flounder", "Gulf Flounder", "Atlantic Croaker", "Spot",
+      "Silver Perch", "Pinfish", "Hardhead Catfish", "Gafftop Catfish (Sail Catfish)",
+      "Whiting (Gulf Kingfish)", "Spanish Mackerel", "King Mackerel", "Bluefish",
+      "Ladyfish", "Jack Crevalle", "Florida Pompano", "Striped Mullet",
+      "Blacktip Shark", "Bonnethead Shark", "Atlantic Sharpnose Shark", "Bull Shark",
+      "Spinner Shark", "Southern Stingray", "Cownose Ray",
+    ],
+    conditions: { ...GULF_TIDES, activityForecast: "Warm Gulf waters. Speckled trout and redfish on grass flats. Sharks active in deeper passes." },
+  },
+
+  // ======= South Atlantic (FL East, GA, SC, NC) =======
+  "south-atlantic": {
+    name: "South Atlantic Coast — Florida to North Carolina",
+    waterBodyType: "surf", lat: 32.0, lon: -80.0,
+    species: [
+      "Speckled Trout", "Red Drum", "Black Drum", "Sheepshead", "Flounder (Southern)",
+      "Atlantic Croaker", "Hardhead Catfish", "Whiting (Gulf Kingfish)",
+      "Spanish Mackerel", "King Mackerel", "Bluefish", "Striped Bass",
+      "Ladyfish", "Jack Crevalle", "Cobia", "Pompano",
+      "Summer Flounder (Fluke)", "Mangrove Snapper", "Vermilion Snapper",
+      "Blacktip Shark", "Bonnethead Shark", "Atlantic Sharpnose Shark", "Southern Stingray",
+    ],
+    conditions: { ...GULF_TIDES, waterTemp: 72, salinity: 32, activityForecast: "Atlantic surf conditions. Red drum in troughs, pompano on sandbars. Fall run beginning for blues and Spanish mackerel." },
+  },
+
+  // ======= Mid-Atlantic / Northeast (VA to ME) =======
+  "northeast": {
+    name: "Northeast Coast — Virginia to Maine",
+    waterBodyType: "surf", lat: 41.0, lon: -72.0,
+    species: [
+      "Striped Bass", "Bluefish", "Summer Flounder (Fluke)", "Tautog (Blackfish)",
+      "Scup (Porgy)", "Black Sea Bass", "Weakfish", "Atlantic Croaker",
+      "Spanish Mackerel", "King Mackerel", "False Albacore (Little Tunny)",
+      "Bonito (Atlantic)", "Dogfish Shark (Spiny)", "Smooth Dogfish", "Weakfish",
+    ],
+    conditions: { ...GULF_TIDES, waterTemp: 65, salinity: 30, waveHeight: 3.0, activityForecast: "Cooler water. Striped bass blitzing on bunker schools. Fluke on sandy bottom in 30-50 ft." },
+  },
+
+  // ======= Pacific Coast (CA, OR) =======
+  "pacific": {
+    name: "Pacific Coast — California to Oregon",
+    waterBodyType: "surf", lat: 36.0, lon: -122.0,
+    species: [
+      "California Halibut", "Lingcod", "Rockfish (Various)", "Surf Perch",
+      "Leopard Shark", "Bat Ray", "Sturgeon (White)", "Jacksmelt",
+      "Striped Bass", "Chinook Salmon (King)", "Coho Salmon (Silver)",
+    ],
+    conditions: { ...GULF_TIDES, waterTemp: 58, salinity: 33, waveHeight: 4.0, overallRating: 6, activityForecast: "Cool Pacific waters. Halibut on sandy flats near structure. Rockfish plentiful on nearshore reefs." },
+  },
+
+  // ======= Pacific Northwest (WA, OR) =======
+  "pacific-nw": {
+    name: "Pacific Northwest — Washington & Oregon",
+    waterBodyType: "sound", lat: 47.6, lon: -122.3,
+    species: [
+      "Chinook Salmon (King)", "Coho Salmon (Silver)", "Lingcod", "Rockfish (Various)",
+      "Halibut (Pacific)", "Surf Perch", "Sturgeon (White)", "Leopard Shark",
+      "Bat Ray", "Jacksmelt", "Dogfish Shark (Spiny)",
+    ],
+    conditions: { ...GULF_TIDES, waterTemp: 52, salinity: 30, waveHeight: 3.0, activityForecast: "Pacific Northwest waters. Salmon trolling near the surface at dawn. Lingcod on rocky reefs in 60-100 ft." },
+  },
+
+  // ======= Florida Keys / Tropical =======
+  "florida-keys": {
+    name: "Florida Keys — Tropical Waters",
+    waterBodyType: "ocean", lat: 24.56, lon: -81.78,
+    species: [
+      "Tarpon", "Snook", "Bonefish", "Permit", "Red Drum",
+      "Speckled Trout", "Mangrove Snapper", "Lane Snapper", "Yellowtail Snapper",
+      "Grouper (Gag)", "Grouper (Red)", "Mahi-Mahi (Dolphinfish)",
+      "Spanish Mackerel", "King Mackerel", "Cobia", "Blackfin Tuna",
+      "Barracuda (Great)", "Blacktip Shark", "Bonnethead Shark", "Nurse Shark",
+      "Lemon Shark", "Southern Stingray", "Florida Gar",
+    ],
+    conditions: { ...GULF_TIDES, waterTemp: 82, salinity: 35, waterClarity: "clear", activityForecast: "Tropical paradise. Tarpon rolling in the passes at dawn. Bonefish tailing on the flats. Reef snapper and grouper active on offshore structure." },
+  },
+
+  // ======= Great Lakes =======
+  "great-lakes": {
+    name: "Great Lakes — Freshwater",
+    waterBodyType: "lake", lat: 43.0, lon: -87.0,
+    species: [
+      "Chinook Salmon (Great Lakes)", "Coho Salmon (Silver)", "Rainbow Trout", "Steelhead Trout",
+      "Brown Trout", "Lake Trout", "Smallmouth Bass", "Yellow Perch",
+      "Walleye", "Northern Pike", "Muskellunge (Muskie)", "Freshwater Drum",
+      "Whitefish (Lake)", "Channel Catfish",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 62, waterClarity: "moderate", overallRating: 7, activityForecast: "Great Lakes conditions. Salmon trolling near thermocline. Smallmouth bass on rocky structure at 15-30 ft." },
+  },
+
+  // ======= Warm Freshwater (Southeast / South) =======
+  "inland-south": {
+    name: "Inland South — Warm Freshwater",
+    waterBodyType: "lake", lat: 32.0, lon: -93.0,
+    species: [
+      "Largemouth Bass", "Channel Catfish", "Blue Catfish", "Flathead Catfish",
+      "White Crappie", "Black Crappie", "Bluegill", "Redear Sunfish (Shellcracker)",
+      "Longear Sunfish", "Green Sunfish", "Warmouth", "White Bass",
+      "Hybrid Striped Bass", "Carp", "Buffalo Fish", "Gar (Longnose)",
+      "Bowfin (Dogfish)", "Freshwater Drum", "Bullhead Catfish",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 78, overallRating: 8, activityForecast: "Warm freshwater conditions. Bass on deep ledges and vegetation. Catfish active at night. Crappie suspended in brush piles at 8-12 ft." },
+  },
+
+  // ======= Cool Freshwater (North / Mountain) =======
+  "inland-north": {
+    name: "Inland North — Cool Freshwater",
+    waterBodyType: "lake", lat: 45.0, lon: -89.0,
+    species: [
+      "Largemouth Bass", "Smallmouth Bass", "Walleye", "Yellow Perch",
+      "Northern Pike", "Muskellunge (Muskie)", "Chain Pickerel", "Rock Bass",
+      "Rainbow Trout", "Brown Trout", "Lake Trout", "Brook Trout",
+      "Kokanee Salmon", "Steelhead Trout", "Channel Catfish", "Bullhead Catfish",
+      "Carp", "Whitefish (Lake)", "Freshwater Drum",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 60, overallRating: 7, activityForecast: "Cool northern waters. Walleye on deep rocky points at dawn. Trout active in tributary streams. Pike in weedy shallows." },
+  },
+
+  // ======= Pacific Rivers (CA, OR, WA, ID) =======
+  "pacific-rivers": {
+    name: "Pacific Rivers — Salmon & Steelhead",
+    waterBodyType: "river", lat: 44.0, lon: -122.0,
+    species: [
+      "Chinook Salmon (King)", "Coho Salmon (Silver)", "Steelhead Trout", "Rainbow Trout",
+      "Brown Trout", "Cutthroat Trout", "Smallmouth Bass", "Channel Catfish",
+      "Sturgeon (White)",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 55, overallRating: 6, activityForecast: "River conditions dependent on dam releases and rainfall. Steelhead holding in deep runs. Trout on hatches." },
+  },
+
+  // ===== Specific Texas Lakes (TPWD Survey Data) =====
+  // Source: TPWD Lake Survey Reports
+  // Lake Houston 2022-2023: https://tpwd.texas.gov/publications/pwdpubs/lake_survey/pwd_rp_t3200_1309/
+  "lake-houston": {
+    name: "Lake Houston, TX — TPWD 2022-2023 Survey",
+    waterBodyType: "lake", lat: 29.9, lon: -95.14,
+    species: [
+      "Largemouth Bass", "White Bass", "White Crappie", "Black Crappie",
+      "Blue Catfish", "Channel Catfish", "Flathead Catfish",
+      "Bluegill", "Longear Sunfish", "Redear Sunfish", "Warmouth",
+      "Gizzard Shad", "Threadfin Shad", "Inland Silverside",
+      "Spotted Gar", "Redfin Pickerel", "Carp", "Spotted Sucker", "Freshwater Drum",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 72, overallRating: 7, activityForecast: "Per TPWD: Catfish angling comprises 32% of all effort. Largemouth Bass in standing timber. White Bass in river forks during spring spawn. Crappie near brush piles at 8-12 ft." },
+  },
+  // Lake Conroe 2021-2022: https://tpwd.texas.gov/publications/pwdpubs/lake_survey/pwd_rp_t3200_1278/
+  "lake-conroe": {
+    name: "Lake Conroe, TX — TPWD 2021-2022 Survey",
+    waterBodyType: "lake", lat: 30.45, lon: -95.58,
+    species: [
+      "Largemouth Bass", "White Bass", "Hybrid Striped Bass",
+      "Blue Catfish", "Channel Catfish", "Flathead Catfish",
+      "Black Crappie", "White Crappie",
+      "Bluegill", "Longear Sunfish", "Warmouth",
+      "Gizzard Shad", "Threadfin Shad",
+      "Carp", "Freshwater Drum",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 74, overallRating: 8, activityForecast: "Per TPWD: Largemouth Bass are the #1 target species. Hybrid Striped Bass provide open-water action. Lake record bass 15.93 lbs. Channel Catfish most abundant sportfish." },
+  },
+  // Lake Livingston 2024-2025: https://tpwd.texas.gov/publications/pwdpubs/lake_survey/pwd_rp_t3200_1326/
+  "lake-livingston": {
+    name: "Lake Livingston, TX — TPWD 2024-2025 Survey",
+    waterBodyType: "lake", lat: 30.75, lon: -95.17,
+    species: [
+      "Blue Catfish", "Channel Catfish", "Flathead Catfish",
+      "White Bass", "Striped Bass", "Hybrid Striped Bass",
+      "Largemouth Bass", "Black Crappie", "White Crappie",
+      "Bluegill", "Gizzard Shad", "Threadfin Shad",
+      "Alligator Gar",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 76, overallRating: 7, activityForecast: "Per TPWD: White Bass fishery is #1 by angler effort (58%). Blue Catfish abundant in main lake channels. Alligator Gar subject to 48-inch max length limit. Striped Bass stocked for hatchery broodfish." },
+  },
+  // Lake Travis — Highland Lake near Austin, TX (LCRA survey data)
+  "lake-travis": {
+    name: "Lake Travis, TX — LCRA Highland Lake Survey",
+    waterBodyType: "lake", lat: 30.38, lon: -97.97,
+    species: [
+      "Largemouth Bass", "Guadalupe Bass", "White Bass", "Striped Bass",
+      "Channel Catfish", "Blue Catfish", "Flathead Catfish",
+      "Black Crappie", "White Crappie",
+      "Bluegill", "Redear Sunfish", "Longear Sunfish", "Warmouth",
+      "Carp", "Freshwater Drum",
+      "Gizzard Shad", "Threadfin Shad",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 72, overallRating: 7, activityForecast: "LCRA: Lake Travis is 63 mi long with 270 mi of shoreline. Striped Bass stocked annually. Guadalupe Bass in rocky riverine areas. Catfish abundant year-round." },
+  },
+  // Community/neighborhood lakes — common HOA stocking
+  "community-lake-south": {
+    name: "Southern US Community Lake — HOA / Private Stocking",
+    waterBodyType: "lake", lat: 32.0, lon: -95.0,
+    species: [
+      "Largemouth Bass",
+      "Channel Catfish", "Bluegill", "Redear Sunfish (Shellcracker)",
+      "Black Crappie", "Warmouth", "Green Sunfish",
+      "Triploid Grass Carp",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 78, overallRating: 7, activityForecast: "Community lakes in the South are commonly stocked with Channel Catfish (spring/summer) and Largemouth Bass. Bluegill and Shellcracker establish naturally. Grass Carp may be stocked under permit for vegetation control. TPWD Neighborhood Fishin' Program stocks Rainbow Trout in winter at select community lakes." },
+  },
+  "community-lake-fishin-program": {
+    name: "Texas Neighborhood Fishin' Lake — TPWD Stocked",
+    waterBodyType: "lake", lat: 29.76, lon: -95.36,
+    species: [
+      "Rainbow Trout", "Channel Catfish", "Largemouth Bass",
+      "Bluegill", "Redear Sunfish (Shellcracker)", "Green Sunfish",
+    ],
+    conditions: { ...FRESHWATER_CONDITIONS, waterTemp: 72, overallRating: 8, activityForecast: "TPWD Neighborhood Fishin' Program: Channel Catfish stocked every 2 weeks Apr-Oct (12 fish per acre). Rainbow Trout stocked every 2 weeks Dec-Feb. Largemouth Bass and Bluegill are self-sustaining. See https://tpwd.texas.gov/fishboat/fish/management/stocking/neighborhood_fishin.phtml" },
+  },
+};
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
   }
-});
+  return dp[m][n];
+}
+
+type RegionAssignment = {
+  regionKey: string;
+  resolvedName: string;
+  lat: number;
+  lon: number;
+  waterBodyType: string;
+};
+
+const LOCATION_REGION_MAP: Record<string, RegionAssignment> = {
+  "galveston": { regionKey: "gulf-coast", resolvedName: "Galveston Seawall, TX", lat: 29.28, lon: -94.78, waterBodyType: "pier" },
+  "galveston island": { regionKey: "gulf-coast", resolvedName: "Galveston Island, TX", lat: 29.28, lon: -94.78, waterBodyType: "pier" },
+  "outer banks": { regionKey: "south-atlantic", resolvedName: "Outer Banks, NC", lat: 35.57, lon: -75.47, waterBodyType: "surf" },
+  "florida keys": { regionKey: "florida-keys", resolvedName: "Florida Keys", lat: 24.56, lon: -81.78, waterBodyType: "ocean" },
+  "chesapeake": { regionKey: "northeast", resolvedName: "Chesapeake Bay, MD", lat: 38.0, lon: -76.3, waterBodyType: "bay" },
+  "chesapeake bay": { regionKey: "northeast", resolvedName: "Chesapeake Bay, MD", lat: 38.0, lon: -76.3, waterBodyType: "bay" },
+  "destin": { regionKey: "gulf-coast", resolvedName: "Destin Harbor, FL", lat: 30.39, lon: -86.5, waterBodyType: "harbor" },
+  "san francisco": { regionKey: "pacific", resolvedName: "San Francisco Bay, CA", lat: 37.77, lon: -122.42, waterBodyType: "bay" },
+  "san francisco bay": { regionKey: "pacific", resolvedName: "San Francisco Bay, CA", lat: 37.77, lon: -122.42, waterBodyType: "bay" },
+  "charleston": { regionKey: "south-atlantic", resolvedName: "Charleston Harbor, SC", lat: 32.78, lon: -79.93, waterBodyType: "harbor" },
+  "charleston harbor": { regionKey: "south-atlantic", resolvedName: "Charleston Harbor, SC", lat: 32.78, lon: -79.93, waterBodyType: "harbor" },
+  "puget sound": { regionKey: "pacific-nw", resolvedName: "Puget Sound, WA", lat: 47.61, lon: -122.34, waterBodyType: "sound" },
+  "puget": { regionKey: "pacific-nw", resolvedName: "Puget Sound, WA", lat: 47.61, lon: -122.34, waterBodyType: "sound" },
+  "mississippi river": { regionKey: "inland-south", resolvedName: "Mississippi River, New Orleans, LA", lat: 29.95, lon: -90.07, waterBodyType: "river" },
+  "new orleans": { regionKey: "inland-south", resolvedName: "Mississippi River, New Orleans, LA", lat: 29.95, lon: -90.07, waterBodyType: "river" },
+  "lake fork": { regionKey: "inland-south", resolvedName: "Lake Fork, TX", lat: 32.78, lon: -95.53, waterBodyType: "lake" },
+  "lake tahoe": { regionKey: "inland-north", resolvedName: "Lake Tahoe, CA", lat: 39.09, lon: -120.04, waterBodyType: "lake" },
+  "okeechobee": { regionKey: "inland-south", resolvedName: "Lake Okeechobee, FL", lat: 26.96, lon: -80.80, waterBodyType: "lake" },
+  "lake okeechobee": { regionKey: "inland-south", resolvedName: "Lake Okeechobee, FL", lat: 26.96, lon: -80.80, waterBodyType: "lake" },
+  "lake michigan": { regionKey: "great-lakes", resolvedName: "Lake Michigan, Chicago", lat: 41.88, lon: -87.63, waterBodyType: "lake" },
+  "lake michigan chicago": { regionKey: "great-lakes", resolvedName: "Lake Michigan, Chicago", lat: 41.88, lon: -87.63, waterBodyType: "lake" },
+  "lake ontario": { regionKey: "great-lakes", resolvedName: "Lake Ontario, NY", lat: 43.6, lon: -77.7, waterBodyType: "lake" },
+  "lake erie": { regionKey: "great-lakes", resolvedName: "Lake Erie, OH/PA/NY", lat: 42.2, lon: -80.0, waterBodyType: "lake" },
+  "lake huron": { regionKey: "great-lakes", resolvedName: "Lake Huron, MI", lat: 44.0, lon: -82.5, waterBodyType: "lake" },
+  "lake superior": { regionKey: "great-lakes", resolvedName: "Lake Superior, MI/WI/MN", lat: 47.0, lon: -87.0, waterBodyType: "lake" },
+  "lake champlain": { regionKey: "inland-north", resolvedName: "Lake Champlain, VT/NY", lat: 44.5, lon: -73.3, waterBodyType: "lake" },
+  "lake houston": { regionKey: "lake-houston", resolvedName: "Lake Houston, TX", lat: 29.9, lon: -95.14, waterBodyType: "lake" },
+  "lake conroe": { regionKey: "lake-conroe", resolvedName: "Lake Conroe, TX", lat: 30.45, lon: -95.58, waterBodyType: "lake" },
+  "lake travis": { regionKey: "lake-travis", resolvedName: "Lake Travis, TX", lat: 30.38, lon: -97.97, waterBodyType: "lake" },
+  "lake livingston": { regionKey: "lake-livingston", resolvedName: "Lake Livingston, TX", lat: 30.75, lon: -95.17, waterBodyType: "lake" },
+  "livingston reservoir": { regionKey: "lake-livingston", resolvedName: "Lake Livingston, TX", lat: 30.75, lon: -95.17, waterBodyType: "lake" },
+  "colorado river": { regionKey: "inland-south", resolvedName: "Colorado River, AZ", lat: 36.0, lon: -114.74, waterBodyType: "river" },
+  "columbia river": { regionKey: "pacific-rivers", resolvedName: "Columbia River, OR", lat: 46.17, lon: -123.76, waterBodyType: "river" },
+};
+
+const LOCATION_ALIASES: Record<string, string> = {
+  "galvestion": "galveston", "galviston": "galveston", "galveston seawall": "galveston",
+  "obx": "outer banks", "outer bank": "outer banks", "outerbanks": "outer banks", "outer banks nc": "outer banks",
+  "the keys": "florida keys", "fl keys": "florida keys", "florida key": "florida keys",
+  "chesapeak": "chesapeake", "chesapeak bay": "chesapeake", "ches bay": "chesapeake",
+  "destine": "destin", "destin fl": "destin", "destin florida": "destin", "destin harbor": "destin",
+  "san fransisco": "san francisco", "s.f. bay": "san francisco", "sf bay": "san francisco", "sf ca": "san francisco", "san fran": "san francisco",
+  "charleton": "charleston", "charlston": "charleston", "charleston sc": "charleston", "charleston south carolina": "charleston",
+  "puget sound wa": "puget sound", "puget washington": "puget sound",
+  "mississippi": "mississippi river", "nola": "new orleans", "new orleans la": "new orleans", "big easy": "new orleans",
+  "lake fork tx": "lake fork", "fork texas": "lake fork", "lakefork": "lake fork",
+  "tahoe": "lake tahoe", "lake tahoe ca": "lake tahoe", "tahoe lake": "lake tahoe",
+  "okeechobee florida": "okeechobee", "lake okee": "okeechobee", "okee": "okeechobee",
+  "michigan lakefront": "lake michigan", "great lakes": "lake michigan",
+  "colorado river az": "colorado river", "colorado river arizona": "colorado river",
+  "columbia river oregon": "columbia river", "columbia river wa": "columbia river", "columbia gorge": "columbia river",
+  "destin florida": "destin",
+  "galveston tx": "galveston",
+  "galveston texas": "galveston",
+  "outer banks nc": "outer banks",
+  "fl keys": "florida keys",
+  "san diego": "pacific", "southern california": "pacific", "california coast": "pacific",
+  "miami": "florida-keys", "miami beach": "florida-keys",
+  "gulf shores": "gulf-coast", "orange beach": "gulf-coast", "panama city": "gulf-coast",
+  "virginia beach": "south-atlantic", "myrtle beach": "south-atlantic", "hilton head": "south-atlantic",
+};
+
+const LOCATION_KEYWORDS_SALTWATER = /ocean|beach|surf|pier|bay|gulf|coast|sound|inlet|pass|harbor|reef|shoal|marsh|seawall|jetty|wharf|dock|marina|shrimp|crab|oyster|saltwater|salt|tide|tidal|nautical|anchorage|port|island|caye|coral|barrier/;
+const LOCATION_KEYWORDS_FRESHWATER = /lake|pond|reservoir|creek|stream|river|bayou|slough|swamp|spring|brook|canal|dam|weir/;
+const LOCATION_NAMES_COASTAL = /galveston|houston|corpus|padre|mustang|miami|tampa|naples|fort myers|panama city|biloxi|mobile|gulfport|savannah|hilton head|myrtle beach|virginia beach|atlantic city|cape cod|nantucket|newport|long island|montauk|boston|portland|seattle|tacoma|san diego|los angeles|long beach|santa monica|santa barbara|monterey|santa cruz|half moon|venice|ocean|beach|pier|harbor|new orleans|baton rouge|lake charles|pensacola|st petersburg|daytona|jacksonville|norfolk|annapolis/;
+const LOCATION_NAMES_INLAND = /tahoe|fork|okeechobee|guntersville|pickwick|kentucky|wheeler|sam rayburn|toledo bend|fayette|travis|buchanan|amistad|conroe|livingston|caddo|eufaula|grand lake|table rock|bull shoals|norfolk|beaver|trout lake|blue lake|crystal lake|clear lake|walden|austin|dallas|san antonio|laredo|waco|tyler|longview|el paso/;
+const LOCATION_NON_WATER = /retreat|ranch|estates|village|community|club|drive|lane|street|road|court|circle|blvd|boulevard|apartments|condo|resort|spa|inn|lodge|hotel|motel|manor|subdivision|addition|terrace|acres|vista|trace|plantation|pointe|camp|school|church|hospital|mall|plaza|market|ballpark|stadium|arena|factory|warehouse|office|bank|gym|studio|theatre|theater|cinema|diner|bakery|brewery|distillery|winery|farm|barn|mill|mine|quarry/;
+
+const STATE_REGION: Record<string, string> = {
+  tx: "gulf-coast", texas: "gulf-coast",
+  la: "gulf-coast", louisiana: "gulf-coast",
+  ms: "gulf-coast", mississippi: "gulf-coast",
+  al: "gulf-coast", alabama: "gulf-coast",
+  fl: "florida-keys", florida: "florida-keys",
+  ga: "south-atlantic", georgia: "south-atlantic",
+  sc: "south-atlantic", "south carolina": "south-atlantic",
+  nc: "south-atlantic", "north carolina": "south-atlantic",
+  va: "south-atlantic", virginia: "south-atlantic",
+  md: "south-atlantic", maryland: "south-atlantic",
+  de: "northeast", delaware: "northeast",
+  nj: "northeast", "new jersey": "northeast",
+  ny: "northeast", "new york": "northeast",
+  ct: "northeast", connecticut: "northeast",
+  ri: "northeast", "rhode island": "northeast",
+  ma: "northeast", massachusetts: "northeast",
+  nh: "northeast", "new hampshire": "northeast",
+  me: "northeast", maine: "northeast",
+  vt: "inland-north", vermont: "inland-north",
+  ca: "pacific", california: "pacific",
+  or: "pacific-nw", oregon: "pacific-nw",
+  wa: "pacific-nw", washington: "pacific-nw",
+  hi: "pacific", hawaii: "pacific",
+  mi: "great-lakes", michigan: "great-lakes",
+  wi: "great-lakes", wisconsin: "great-lakes",
+  mn: "great-lakes", minnesota: "great-lakes",
+  il: "great-lakes", illinois: "great-lakes",
+  in: "great-lakes", indiana: "great-lakes",
+  oh: "great-lakes", ohio: "great-lakes",
+  pa: "great-lakes", pennsylvania: "great-lakes",
+};
+
+function fillBaitMap(species: string[]): BaitRec[] {
+  return species.map(s => SPECIES_BAIT[s]).filter(Boolean);
+}
+
+function classifyLocation(name: string): { regionKey: string; resolvedName: string; lat: number; lon: number; waterBodyType: string; matchType: "exact" | "fuzzy" | "estimated" } {
+  const loc = name.toLowerCase().trim();
+
+  // 1) direct alias lookup
+  if (LOCATION_ALIASES[loc]) {
+    const alias = LOCATION_ALIASES[loc];
+    if (LOCATION_REGION_MAP[alias]) return { ...LOCATION_REGION_MAP[alias], resolvedName: name, matchType: "exact" };
+  }
+
+  // 2) substring match against location map keys
+  for (const [key, region] of Object.entries(LOCATION_REGION_MAP)) {
+    if (loc.includes(key)) return { ...region, resolvedName: name, matchType: "exact" };
+  }
+
+  // 3) alias substring match
+  for (const [alias, target] of Object.entries(LOCATION_ALIASES)) {
+    if (loc.includes(alias)) {
+      const region = LOCATION_REGION_MAP[target];
+      if (region) return { ...region, resolvedName: name, matchType: "exact" };
+    }
+  }
+
+  // 4) Levenshtein distance for misspellings
+  let bestDist = Infinity;
+  let bestMatch: RegionAssignment | null = null;
+  for (const [key, region] of Object.entries(LOCATION_REGION_MAP)) {
+    if (Math.abs(loc.length - key.length) > 3) continue;
+    const dist = levenshtein(loc.substring(0, key.length), key);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestMatch = region;
+    }
+  }
+  for (const [alias, target] of Object.entries(LOCATION_ALIASES)) {
+    if (Math.abs(loc.length - alias.length) > 3) continue;
+    const dist = levenshtein(loc.substring(0, alias.length), alias);
+    if (dist < bestDist) {
+      bestDist = dist;
+      const region = LOCATION_REGION_MAP[target];
+      if (region) bestMatch = region;
+    }
+  }
+  if (bestDist <= 2 && bestMatch) return { ...bestMatch, resolvedName: name, matchType: "fuzzy" };
+
+  // 5) keyword analysis fallback
+  const words = loc.split(/[\s,.-]+/).filter(Boolean);
+  let saltScore = 0;
+  let freshScore = 0;
+  for (const w of words) {
+    if (LOCATION_KEYWORDS_SALTWATER.test(w)) saltScore += 4;
+    if (LOCATION_KEYWORDS_FRESHWATER.test(w)) freshScore += 4;
+    if (LOCATION_NAMES_COASTAL.test(w)) saltScore += 2;
+    if (LOCATION_NAMES_INLAND.test(w)) freshScore += 2;
+  }
+
+  // check for state overrides
+  let stateRegion: string | null = null;
+  for (const w of words) {
+    if (STATE_REGION[w]) { stateRegion = STATE_REGION[w]; break; }
+  }
+  for (let i = 0; i < words.length - 1 && !stateRegion; i++) {
+    const two = `${words[i]} ${words[i+1]}`;
+    if (STATE_REGION[two]) stateRegion = STATE_REGION[two];
+  }
+
+  // community lake detection — name has HOA/neighborhood keywords
+  const hasCommunityWord = words.some(w => LOCATION_NON_WATER.test(w));
+  const hasFreshKeyword = words.some(w => LOCATION_KEYWORDS_FRESHWATER.test(w));
+  if (hasCommunityWord && hasFreshKeyword) {
+    const wbt = loc.includes("lake") ? "lake" : loc.includes("pond") ? "pond" : "lake";
+    if (stateRegion === "gulf-coast" && /housto|tx|texas/.test(loc)) {
+      return { regionKey: "community-lake-fishin-program", resolvedName: name, lat: 29.76, lon: -95.36, waterBodyType: wbt, matchType: "estimated" };
+    }
+    return { regionKey: "community-lake-south", resolvedName: name, lat: 32.0, lon: -95.0, waterBodyType: wbt, matchType: "estimated" };
+  }
+
+  const lastWord = words[words.length - 1] || "";
+  const firstWord = words[0] || "";
+
+  if (saltScore > freshScore || ["bay", "sound", "inlet", "harbor", "beach", "pier", "coast", "gulf", "shore", "ocean", "sea"].includes(lastWord) || ["cape", "gulf", "port", "fort"].includes(firstWord)) {
+    const wbt = loc.includes("pier") ? "pier" : loc.includes("beach") ? "surf" : loc.includes("bay") ? "bay" : loc.includes("harbor") ? "harbor" : "coastal";
+    const regionKey = stateRegion || "gulf-coast";
+    const r = REGION_PROFILES[regionKey];
+    return { regionKey, resolvedName: name, lat: r.lat, lon: r.lon, waterBodyType: wbt, matchType: "estimated" };
+  }
+
+  if (freshScore > saltScore || ["lake", "pond", "river", "creek", "brook", "reservoir"].includes(lastWord)) {
+    const wbt = loc.includes("lake") ? "lake" : loc.includes("river") ? "river" : loc.includes("creek") ? "creek" : "lake";
+    const isFreshBody = true;
+    // state override only for freshwater regions (great-lakes, inland-south/north, pacific-rivers)
+    const freshRegions = new Set(["great-lakes", "inland-south", "inland-north", "pacific-rivers", "florida-keys"]);
+    if (stateRegion && freshRegions.has(stateRegion)) {
+      const r = REGION_PROFILES[stateRegion];
+      return { regionKey: stateRegion, resolvedName: name, lat: r.lat, lon: r.lon, waterBodyType: wbt, matchType: "estimated" };
+    }
+    return { regionKey: "inland-south", resolvedName: name, lat: 32.0, lon: -95.0, waterBodyType: wbt, matchType: "estimated" };
+  }
+
+  // default: unknown name → check state or assume coastal saltwater
+  if (stateRegion) {
+    const r = REGION_PROFILES[stateRegion];
+    const wbt = loc.includes("lake") ? "lake" : loc.includes("river") ? "river" : r.waterBodyType;
+    return { regionKey: stateRegion, resolvedName: name, lat: r.lat, lon: r.lon, waterBodyType: wbt, matchType: "estimated" };
+  }
+  return { regionKey: "gulf-coast", resolvedName: name, lat: 29.5, lon: -94.0, waterBodyType: "fishing area", matchType: "estimated" };
+}
+
+async function geocodeLocation(name: string): Promise<{ lat: number; lon: number; displayName: string; category: string } | null> {
+  try {
+    const q = name.toLowerCase().match(/\b(lake|river|bay|pond|reservoir|creek)\b/) ? name : `${name} lake`;
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ", USA")}&format=json&limit=3&featureType=water&addressdetails=1`,
+      { headers: { "User-Agent": "CoastalAnglerGuide/1.0" }, signal: AbortSignal.timeout(5000) }
+    );
+    const data = await resp.json() as Array<{ lat: string; lon: string; display_name: string; category: string; type: string }>;
+    if (!data?.[0]) return null;
+    const best = data[0];
+    return { lat: parseFloat(best.lat), lon: parseFloat(best.lon), displayName: best.display_name, category: best.category };
+  } catch {
+    return null;
+  }
+}
+
+async function lookupFishOnWikipedia(name: string): Promise<{ species: string[]; pageTitle: string } | null> {
+  try {
+    const searchResp = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(name)}&srlimit=5&format=json`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    const searchData = await searchResp.json() as any;
+    const pages = searchData?.query?.search || [];
+    const target = pages.find((p: any) => {
+      const t = p.title.toLowerCase();
+      return t === name.toLowerCase() || t.includes(name.toLowerCase());
+    }) || pages[0];
+    if (!target) return null;
+
+    const pageResp = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=${encodeURIComponent(target.title)}&explaintext&format=json&exlimit=1`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    const pageData = await pageResp.json() as any;
+    const pages2 = pageData?.query?.pages || {};
+    const extract = Object.values(pages2 as Record<string, any>)[0]?.extract || "";
+
+    const sections = extract.split(/\n==+\s*/);
+    const fishSections = sections.filter(s => /fish|fishing|ecology|species|wildlife|fauna/i.test(s));
+    const textToSearch = fishSections.length > 0 ? fishSections.join("\n") : extract;
+
+    const commonFish = ["bass", "trout", "catfish", "sunfish", "crappie", "perch", "walleye", "pike", "muskie", "pickerel", "bluegill", "carp", "shad", "drum", "gar", "bowfin", "bullhead", "salmon", "steelhead", "char", "chub", "dace", "shiner", "sucker", "minnow", "topminnow", "killifish", "madtom", "sculpin", "darter", "logperch", "silverside", "smelt", "tilapia", "cichlid", "mosquitofish", "goby"];
+    const found: string[] = [];
+    for (const line of textToSearch.split("\n")) {
+      for (const cf of commonFish) {
+        const re = new RegExp(`\\b([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})\\b.*${cf}`, "i");
+        const m = line.match(re);
+        if (m && !found.includes(m[1])) {
+          found.push(m[1]);
+        }
+      }
+    }
+    if (found.length < 3) return null;
+    return { species: found.slice(0, 30), pageTitle: target.title };
+  } catch {
+    return null;
+  }
+}
+
+async function lookupFishOnINaturalist(lat: number, lon: number, isFreshwater: boolean): Promise<{ species: string[] } | null> {
+  try {
+    const resp = await fetch(
+      `https://api.inaturalist.org/v1/observations/species_counts?taxon_id=47178&lat=${lat}&lng=${lon}&radius=15&verifiable=true&order=desc&order_by=observed_on`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    const data = await resp.json() as { total_results: number; results: Array<{ taxon: { id: number; name: string; preferred_common_name?: string; rank: string } }> };
+    if (!data?.total_results || !data.results) return null;
+    const freshwaterOnly = ["centrarchidae", "ictaluridae", "percidae", "esocidae", "cyprinidae", "catostomidae", "acipenseridae", "salmonidae", "lepisosteidae", "amiidae", "moronidae", "polyodontidae", "hiodontidae", "aphredoderidae", "fundulidae", "poeciliidae", "atherinopsidae", "gasterosteidae", "cottidae"];
+    const results = data.results
+      .filter(r => r.taxon.rank === "species");
+    if (results.length === 0) return null;
+    const species = results.map(r => r.taxon.preferred_common_name || r.taxon.name).filter(Boolean);
+    if (species.length === 0) return null;
+    return { species: species.slice(0, 25) };
+  } catch {
+    return null;
+  }
+}
 
 router.post("/search-location", async (req, res) => {
   const parsed = SearchLocationBody.safeParse(req.body);
@@ -340,150 +882,105 @@ router.post("/search-location", async (req, res) => {
   }
 
   const { locationName } = parsed.data;
+  const assignment = classifyLocation(locationName);
+  const region = REGION_PROFILES[assignment.regionKey];
 
-  const prompt = `You are a expert fishing guide, limnologist, and local knowledge database with deep knowledge of every body of water in the United States — including small private ponds, HOA community lakes, ranch tanks, retention ponds, neighborhood fishing holes, and golf course lakes. The angler is asking about: "${locationName}"
+  let species = region.species;
+  let matchNote = "";
+  let externalSource = "";
+  let externalUrl = "";
 
-IMPORTANT: Even if this is a small private lake, HOA amenity pond, community fishing hole, or a location you have never explicitly seen — you MUST produce a confident, detailed, useful response by reasoning from:
-- The geographic region and climate (e.g. Houston TX = hot humid subtropical, warm water year-round, bass/catfish/bream country)
-- The type of community or development (e.g. "Retreat" or "Lake View" = likely HOA-managed amenity lake, typically 5-30 acres, regularly stocked with bass and catfish by the HOA or TPWD)
-- Nearby water systems (what watershed is it likely part of?)
-- Season and current conditions for that region
-
-Respond ONLY with valid JSON — no markdown, no explanation. Use this exact structure:
-{
-  "resolvedName": "Lake View Retreat Community Lake, Houston, TX (Harris County)",
-  "latitude": 29.741,
-  "longitude": -95.369,
-  "waterBodyType": "lake",
-  "region": "Greater Houston, TX — Gulf Coast Prairie",
-  "topSpecies": ["Largemouth Bass", "Channel Catfish", "Blue Catfish", "Flathead Catfish", "White Crappie", "Black Crappie", "Bluegill", "Redear Sunfish", "Longear Sunfish", "Green Sunfish", "Carp", "Buffalo Fish", "Gar"],
-  "waterProfile": {
-    "estimatedDepthFt": { "shallow": 2, "deep": 14, "avg": 7 },
-    "estimatedAcres": 12,
-    "bottomType": "Soft clay-mud bottom with some sandy areas near the inlet; layered organic debris near deep hole",
-    "vegetation": ["Hydrilla", "Cattails along north bank", "Lily pads in coves", "Submerged grass beds"],
-    "waterColor": "Murky green-brown — typical Houston-area clay-stained water",
-    "stockingHistory": "Likely HOA-managed; stocked annually with Florida-strain largemouth bass fingerlings and channel catfish by a private fish farm or TPWD; bluegill and crappie naturally reproducing",
-    "fishingZones": [
-      {
-        "name": "North Bank Cove",
-        "description": "Shallow 2-4 ft cove with lily pads and overhanging brush — prime bass ambush zone, especially at dawn",
-        "technique": "Pitch a Texas-rigged creature bait or weedless frog into the pads; work slowly along the edge"
-      },
-      {
-        "name": "Deep Center Hole",
-        "description": "Deepest point (12-14 ft) holds catfish and crappie suspended at 6-8 ft in summer heat",
-        "technique": "Drop a live perch or cut bream on a slip-sinker rig to the bottom for catfish; crappie respond to 1/16 oz jigs vertically jigged"
-      },
-      {
-        "name": "Inlet/Drainage Structure",
-        "description": "Any culvert, pipe, or drainage inlet concentrates baitfish and draws bass, catfish, and crappie — especially after rain",
-        "technique": "Cast a 3-inch curly tail grub or small crankbait tight to the structure"
-      },
-      {
-        "name": "South Dock & Pier",
-        "description": "Structure creates shade and attracts baitfish; crappie suspend under dock boards year-round",
-        "technique": "Drop a live minnow under a small float or jig vertically with a 1/8 oz tube jig in chartreuse"
-      },
-      {
-        "name": "Grass Flat East Shore",
-        "description": "Submerged grass holds bass in early morning and late evening — fish move shallow to feed",
-        "technique": "Slow-roll a 3/8 oz spinnerbait (white/chartreuse) just over the grass tops at first light"
+  if (assignment.matchType === "estimated") {
+    const isAddress = LOCATION_NON_WATER.test(locationName.toLowerCase());
+    if (!isAddress) {
+      const wiki = await lookupFishOnWikipedia(locationName);
+      if (wiki && wiki.species.length >= 3) {
+        species = wiki.species;
+        externalSource = `Wikipedia — "${wiki.pageTitle}"`;
+        externalUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(wiki.pageTitle.replace(/ /g, "_"))}`;
+        matchNote = `Fish species listed on Wikipedia for "${wiki.pageTitle}".`;
+      } else {
+        const geo = await geocodeLocation(locationName);
+        if (geo) {
+          const inat = await lookupFishOnINaturalist(geo.lat, geo.lon, assignment.waterBodyType !== "coastal");
+          if (inat && inat.species.length >= 3) {
+            species = inat.species;
+            externalSource = `iNaturalist community observations near "${locationName}"`;
+            externalUrl = `https://www.inaturalist.org/observations?taxon_id=47178&lat=${geo.lat}&lng=${geo.lon}&radius=15`;
+            assignment.lat = geo.lat;
+            assignment.lon = geo.lon;
+            matchNote = `Species observed near "${geo.displayName}" by the iNaturalist community.`;
+          }
+        }
       }
-    ],
-    "accessPoints": "Bank fishing along community walking path; HOA dock on south end; no motorized boats — kayaks and float tubes may be permitted with HOA approval",
-    "insiderNotes": "HOA community lakes in the Houston area are typically stocked every spring. Fishing pressure is light since most residents don\u2019t fish. Bass tend to be eager biters and can reach 4-6 lbs in managed ponds. Always check HOA rules — some require a fishing permit or limit catch-and-keep. Morning and evening fish best in summer; midday fish go deep and slow."
-  },
-  "baitRecommendations": [
-    {
-      "species": "Largemouth Bass",
-      "topLiveBait": "Live shiners (4-6 inch, freelined or under a float)",
-      "topArtificial": "Texas-rigged Zoom Trick Worm (junebug/green pumpkin)",
-      "liveBaits": ["Live shiners (4-6 inch, freelined or under a float)", "Live perch on a weedless hook", "Live crawfish (hooked through the tail)"],
-      "artificials": ["Texas-rigged Zoom Trick Worm (junebug/green pumpkin)", "Strike King Rage Craw (black/blue) on 3/8 oz jig head", "Booyah Pond Magic spinnerbait (white, 3/8 oz)", "Rapala Skitter Pop (frog) over lily pads"],
-      "bestTime": "Dawn 6-8am and dusk 7-9pm; overcast mornings all day; avoid bright midday sun (bass go deep)",
-      "tip": "In murky HOA lakes, slow down your retrieve and use high-contrast colors — chartreuse and black/blue — so bass can locate your bait by vibration and color contrast."
-    },
-    {
-      "species": "Channel Catfish",
-      "topLiveBait": "Chicken liver on a treble hook (weighted bottom rig)",
-      "topArtificial": "Berkley PowerBait Catfish Chunks (blood scent)",
-      "liveBaits": ["Chicken liver on a treble hook (weighted bottom rig)", "Live perch or bluegill (cut into chunks)", "Nightcrawlers on a slip-sinker rig", "Stink bait / dip bait on a sponge hook"],
-      "artificials": ["Catfish Charlie dip bait", "Berkley PowerBait Catfish Chunks (blood scent)"],
-      "bestTime": "Night fishing 9pm-2am is best; also productive 1-2 hours after a rain event stirs the bottom",
-      "tip": "Position your bait near the deepest point of the lake at night — channel catfish in HOA ponds patrol the bottom of the deep hole after dark."
-    },
-    {
-      "species": "Bluegill",
-      "topLiveBait": "Crickets under a small bobber",
-      "topArtificial": "1/64 oz Mister Twister jig (chartreuse)",
-      "liveBaits": ["Red wigglers (small piece on a #6 hook)", "Crickets under a small bobber", "Waxworms", "Small grass shrimp"],
-      "artificials": ["1/64 oz Mister Twister jig (chartreuse)", "Small beetle spin (white, size 0)", "Panfish Assassin (1.5 inch, pink lemonade)"],
-      "bestTime": "Mid-morning to early afternoon near structure and vegetation edges; beds in May-June in shallow water",
-      "tip": "Bluegill in managed ponds are aggressive — a small cricket under a tiny bobber near the lily pad edge will get bites every few minutes."
-    },
-    {
-      "species": "Crappie",
-      "topLiveBait": "Live minnows (2-inch, hooked through back under a slip float)",
-      "topArtificial": "Bobby Garland Baby Shad (monkey milk)",
-      "liveBaits": ["Live minnows (2-inch, hooked through back under a slip float)", "Small fathead minnows"],
-      "artificials": ["Berkley Crappie Nibble on 1/16 oz jig (pink/white)", "Bobby Garland Baby Shad (monkey milk)", "Small hair jig (white, 1/32 oz)"],
-      "bestTime": "Early morning near dock structure and submerged brush; spring spawn (March-April) in shallows under 4 ft",
-      "tip": "Crappie suspend at a specific depth — once you find the depth where you get bites, stay at that exact depth and move laterally around the dock structure."
     }
-  ],
-  "conditions": {
-    "windSpeed": 8,
-    "windDirection": "SE",
-    "barometricPressure": 30.05,
-    "waterTemp": 82,
-    "tidalPhase": "N/A - Freshwater",
-    "waveHeight": null,
-    "salinity": null,
-    "waterClarity": "murky",
-    "overallRating": 7,
-    "activityForecast": "Good bass and catfish action expected. Water temp at 82°F pushes bass into early morning feeding windows. Overcast days with SE winds will improve bite all day. Catfish will be active after dark near the deep hole. Pressure is stable — expect consistent action.",
-    "tideChart": [
-      {"time": "05:00", "heightFt": 0, "type": "n/a"},
-      {"time": "09:00", "heightFt": 0, "type": "n/a"},
-      {"time": "13:00", "heightFt": 0, "type": "n/a"},
-      {"time": "17:00", "heightFt": 0, "type": "n/a"},
-      {"time": "21:00", "heightFt": 0, "type": "n/a"}
-    ]
-  }
-}
-
-CRITICAL RULES:
-- waterBodyType for small private/community water: use "lake" for named community lakes (>5 acres), "pond" for smaller private water (<5 acres), "river" for streams/bayous
-- If it is freshwater: waveHeight=null, salinity=null, tidalPhase="N/A - Freshwater", tideChart entries all have heightFt=0 and type="n/a"
-- For coastal/saltwater: normal tideChart with real tide data
-- waterProfile MUST be included for any lake, pond, river, or stream; omit only for ocean/surf/pier saltwater locations
-- fishingZones: always 4-5 specific named spots with exact techniques — be as specific as possible about the micro-habitat
-- stockingHistory: reason from the type of community and region — HOA lakes in TX are almost always stocked by HOA management or TPWD; ranch ponds are stocked by landowner; retention ponds may have natural populations only
-- insiderNotes: include HOA/access considerations, pressure level, size expectations for the species, any local quirks
-- For locations you cannot precisely identify by name (small private ponds, community lakes): set latitude/longitude to the approximate centroid of the city/neighborhood mentioned, note it is estimated in resolvedName, and produce a fully detailed profile based on regional knowledge
-- All information must be useful and actionable — never say "unknown" or "data unavailable"
-- topSpecies: list EVERY species an angler realistically might catch at this location — not just the most popular. Include all of: primary targets (bass, catfish, trout, redfish, etc.), panfish and sunfish species (bluegill, redear, crappie, perch, etc.), incidental catches (gar, carp, buffalo, drum, etc.), and any region-specific species. For freshwater TX lakes include all sunfish varieties. For saltwater include drum, flounder, sheepshead, sand trout, croaker, etc. Aim for 8-15 species total — never truncate the list.
-- baitRecommendations: one entry for EVERY species in topSpecies, in the same order — no species should be missing
-- topLiveBait: the single best live bait for today's conditions — must be an exact copy of one item from liveBaits
-- topArtificial: the single best artificial lure for today's conditions — must be an exact copy of one item from artificials
-- liveBaits: 3-5 specific options with rigging detail
-- artificials: 3-5 specific named lures with color and size (for species with no artificials like carp or buffalo, use "N/A — target with natural bait only")
-- overallRating: 1-10 fishing quality for TODAY (June 6, 2026)
-- activityForecast: specific, useful, mentions which species are active and why`;
-
-  try {
-    const result = await callAI([{ role: "user", content: prompt }]);
-    const data = parseJSON(result, null);
-    if (!data) {
-      res.status(500).json({ error: "Could not resolve location" });
-      return;
+    if (!externalSource) {
+      if (assignment.regionKey.startsWith("community-")) {
+        matchNote = assignment.regionKey === "community-lake-fishin-program"
+          ? "Based on TPWD Neighborhood Fishin' Program stocking data for Houston-area community lakes. Channel Catfish are stocked every 2 weeks Apr-Oct, Rainbow Trout Dec-Feb."
+          : "Based on typical HOA and private lake stocking in the Southern US. Largemouth Bass and Bluegill are standard. Grass Carp may be added for vegetation control under permit.";
+      } else {
+        matchNote = `I don't have specific survey data for "${locationName}". These are common fish in similar ${assignment.waterBodyType} habitats in the ${region.name} region.`;
+      }
     }
-    res.json(data);
-  } catch (err) {
-    req.log.error({ err }, "Location search failed");
-    res.status(500).json({ error: "Location search failed" });
   }
+
+  const baitRecs = fillBaitMap(species);
+  const isLakeProfile = assignment.regionKey.startsWith("lake-");
+  const isCommunityLake = assignment.regionKey.startsWith("community-");
+  const sources = isLakeProfile
+    ? [
+        `Texas Parks & Wildlife Department survey report — ${region.name} (https://tpwd.texas.gov/publications/pwdpubs/lake_survey/)`,
+        "Texas Parks & Wildlife Department — lake stocking history & creel surveys (https://tpwd.texas.gov/fishboat/fish/action/stock_bywater.php)",
+      ]
+    : externalSource
+      ? [`${externalSource} (${externalUrl})`]
+      : isCommunityLake
+        ? [
+            "TPWD Neighborhood Fishin' Program — community lake stocking (https://tpwd.texas.gov/fishboat/fish/management/stocking/neighborhood_fishin.phtml)",
+            "TPWD Private Water Stocking — guidelines for HOA/community lakes (https://tpwd.texas.gov/fishboat/fish/management/stocking/private_water.phtml)",
+          ]
+        : assignment.matchType !== "estimated"
+          ? [
+              "NOAA Estuarine Living Marine Resources (ELMR) species inventory — Galveston Bay (https://repository.library.noaa.gov/view/noaa/2882)",
+              "Texas Parks & Wildlife Department Coastal Fisheries monitoring & bait research (https://tpwd.texas.gov/fishboat/fish/)",
+              "Visit Galveston — official tourism fishing guide (https://www.visitgalveston.com/things-to-do/outdoor-activities/fishing/)",
+              "TPWD fishing reports — East Galveston Bay (https://tpwd.texas.gov/fishboat/fish/action/reptform2.php?lake=EAST+GALVESTON+BAY)",
+            ]
+          : [
+              "iNaturalist — community-contributed species observations (https://www.inaturalist.org)",
+              `${region.name} — common species in this habitat type`,
+            ];
+
+  const response: Record<string, unknown> = {
+    resolvedName: locationName,
+    latitude: assignment.lat,
+    longitude: assignment.lon,
+    waterBodyType: assignment.waterBodyType,
+    region: region.name,
+    topSpecies: species,
+    baitRecommendations: baitRecs,
+    conditions: {
+      ...region.conditions,
+      tidalPhase: region.conditions.tidalPhase,
+    },
+    sources,
+  };
+
+  if (externalSource) {
+    response.matchType = "researched";
+    response.matchNote = matchNote;
+  } else if (assignment.matchType === "exact") {
+    response.matchType = "exact";
+  } else if (assignment.matchType === "fuzzy") {
+    response.matchType = "fuzzy";
+    response.matchNote = `Matched "${locationName}" to the ${region.name} region (did you mean a nearby location?).`;
+  } else {
+    response.matchType = "estimated";
+    response.matchNote = matchNote;
+  }
+
+  res.json(response);
 });
 
 export default router;
