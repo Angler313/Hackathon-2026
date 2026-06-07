@@ -323,3 +323,13 @@
     inset: -1px;
   }
 }
+@media (min-width: 768px) {
+  .bait-grid {
+    column-count: 2;
+    column-gap: 0.5rem;
+  }
+  .bait-grid > * {
+    break-inside: avoid;
+    margin-bottom: 0.5rem;
+  }
+}

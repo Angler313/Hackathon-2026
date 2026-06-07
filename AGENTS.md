@@ -18,17 +18,21 @@ A fishing guide website built with Vite + React + Tailwind CSS, located in `Coas
 export PATH="$HOME/.local/bin:$PATH"
 
 # Start the API server (requires PostgreSQL on localhost:5432)
-cd Coastal-Angler-Guide/artifacts/api-server
-DATABASE_URL="postgres://vscode:password@localhost:5432/fishing_guide" PORT=3001 nohup node --enable-source-maps ./dist/index.mjs </dev/null >/tmp/api-server.log 2>&1 &
+cd /workspaces/Hackathon-2026/Coastal-Angler-Guide/artifacts/api-server
+node build.mjs
+setsid bash -c 'DATABASE_URL="postgres://vscode:password@localhost:5432/fishing_guide" PORT=3001 node --enable-source-maps ./dist/index.mjs' < /dev/null > /tmp/api-server.log 2>&1 &
 disown
 
-# Start the frontend dev server
-cd ../fishing-app
-PORT=5173 BASE_PATH=/ nohup npx vite --config vite.config.ts --host 0.0.0.0 </dev/null >/tmp/vite-fishing.log 2>&1 &
+# Wait for API then start frontend dev server
+sleep 3
+cd /workspaces/Hackathon-2026/Coastal-Angler-Guide/artifacts/fishing-app
+setsid bash -c 'PORT=5173 BASE_PATH=/ npx vite --config vite.config.ts --host 0.0.0.0' < /dev/null > /tmp/vite-fishing.log 2>&1 &
 disown
 ```
 
 The site will be available at `http://localhost:5173/`. The Vite dev server proxies `/api/*` requests to the API server on port 3001.
+
+**IMPORTANT:** Start the API server BEFORE Vite. If Vite starts first, its proxy connections will fail with ECONNREFUSED and won't recover. Always restart both together if either goes down.
 
 ## Repo layout
 
@@ -99,11 +103,28 @@ shell — the feature is needed to set up the daemon, not just the CLI.
 
 The `search-location` endpoint in `Coastal-Angler-Guide/artifacts/api-server/src/routes/fishing/index.ts` uses:
 
-- **Region-based location matching** — `classifyLocation()` resolves a user query through: alias lookup → substring match → Levenshtein fuzzy match (≤2 edits). Returns `null` for unrecognized locations.
-- **No guesses for unknown locations** — if `classifyLocation()` returns `null`, the API responds with `status: "not_found"` and a message like "I don't have specific data for this lake". The frontend `LocationSearch` component displays this inline instead of crashing or showing garbage.
-- **Per-region species lists** — 9 regions (gulf-coast, south-atlantic, northeast, pacific, pacific-nw, florida-keys, great-lakes, inland-south, inland-north, pacific-rivers) + specific lake profiles (lake-houston, lake-conroe, lake-livingston) with TPWD survey data.
-- **SPECIES_BAIT** — 100+ species with bait/lure/tip data from NOAA, TPWD, and published guides.
-- **Sources in responses** — each response includes citation URLs (NOAA, TPWD, etc.).
+- **Region-based location matching** — `classifyLocation()` resolves a user query through: alias lookup → substring match → Levenshtein fuzzy match (≤2 edits) → keyword analysis → state detection → community lake detection. Always returns a result — never null.
+- **5 match types**: `exact` (known lake, TPWD/NOAA data), `fuzzy` (misspelling corrected), `researched` (Wikipedia/iNaturalist live lookup), `estimated` (regional data with clear note), and community lake profiles.
+- **Per-region species lists** — 9 regions (gulf-coast, south-atlantic, northeast, pacific, pacific-nw, florida-keys, great-lakes, inland-south, inland-north, pacific-rivers) + specific lake profiles (lake-houston, lake-conroe, lake-livingston, lake-travis) + community lake profiles (community-lake-south, community-lake-fishin-program).
+- **SPECIES_BAIT** — 103 species with bait/lure/tip data from NOAA, TPWD, and published guides.
+- **Live lookups** — For unknown water bodies: Wikipedia API (fish sections) → iNaturalist API (species observations near geocoded coords) → regional estimate. Community/HOA names skip lookups and return TPWD Neighborhood Fishin' data.
+- **State detection** — `STATE_REGION` map (tx→gulf-coast, fl→florida-keys, ca→pacific, etc.) overrides keyword analysis when a state abbreviation is in the query.
+- **Sources in responses** — each response includes citation URLs (NOAA, TPWD, Wikipedia, iNaturalist).
+- **Dashboard map** — OpenStreetMap iframe embed shows the matched/search location with a marker.
+- **Catch Log units** — lbs/in ↔ kg/cm toggle at the top; database always stores metric, frontend converts display values.
+- **Rig Planner** — 103 species in a searchable combobox (type or click from dropdown).
+
+## Troubleshooting
+
+**Blank screen on refresh:** Both servers likely died. Restart API server first, then Vite:
+```bash
+kill $(lsof -ti:3001) $(lsof -ti:5173) 2>/dev/null
+cd /workspaces/Hackathon-2026/Coastal-Angler-Guide/artifacts/api-server
+nohup bash -c 'DATABASE_URL="postgres://vscode:password@localhost:5432/fishing_guide" PORT=3001 node --enable-source-maps ./dist/index.mjs' </dev/null >/tmp/api-server.log 2>&1 &
+sleep 3
+cd /workspaces/Hackathon-2026/Coastal-Angler-Guide/artifacts/fishing-app
+nohup bash -c 'PORT=5173 BASE_PATH=/ npx vite --config vite.config.ts --host 0.0.0.0' </dev/null >/tmp/vite-fishing.log 2>&1 &
+```
 
 ## What to push back on
 

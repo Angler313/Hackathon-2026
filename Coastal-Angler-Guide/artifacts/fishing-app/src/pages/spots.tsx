@@ -21,6 +21,7 @@ export default function Spots() {
   const [lon, setLon] = useState("");
   const [type, setType] = useState("pier");
   const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,13 +36,17 @@ export default function Spots() {
     }, {
       onSuccess: () => {
         setName(""); setLat(""); setLon(""); setNotes("");
+        setError(null);
         queryClient.invalidateQueries({ queryKey: getListSpotsQueryKey() });
+      },
+      onError: () => {
+        setError("Failed to save spot. Please try again.");
       }
     });
   };
 
   const handleDelete = (id: number) => {
-    deleteSpot.mutate(id, {
+    deleteSpot.mutate({ id }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListSpotsQueryKey() });
       }
@@ -90,6 +95,9 @@ export default function Spots() {
                   <Button type="submit" className="w-full" disabled={createSpot.isPending}>
                     {createSpot.isPending ? "Saving..." : "Save Spot"}
                   </Button>
+                  {error && (
+                    <p className="text-sm text-destructive mt-2">{error}</p>
+                  )}
                 </form>
               </CardContent>
             </Card>

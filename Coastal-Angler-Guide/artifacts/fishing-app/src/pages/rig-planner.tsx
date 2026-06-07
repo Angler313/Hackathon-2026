@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useGetRigRecommendations, useGetCastAngle } from "@workspace/api-client-react";
 import { Anchor, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
-import { RigRequestInputWaterType } from "@workspace/api-client-react/src/generated/api.schemas";
 import { cn } from "@/lib/utils";
 
 const ALL_SPECIES = [
@@ -43,11 +42,12 @@ const ALL_SPECIES = [
 
 export default function RigPlanner() {
   const [species, setSpecies] = useState("Red Drum");
-  const [waterType, setWaterType] = useState<RigRequestInputWaterType>("pier");
+  const [fishSize, setFishSize] = useState("medium");
   const [speciesOpen, setSpeciesOpen] = useState(false);
-  
+
   const [rodLength, setRodLength] = useState("7");
   const [sinkerWeight, setSinkerWeight] = useState("2");
+  const [sinkerType, setSinkerType] = useState("pyramid");
   const [targetDistance, setTargetDistance] = useState("100");
 
   const getRigs = useGetRigRecommendations();
@@ -57,9 +57,9 @@ export default function RigPlanner() {
     getRigs.mutate({
       data: {
         targetSpecies: species,
-        waterType: waterType,
-        conditions: {}
-      }
+        waterType: "lake" as any,
+        conditions: { fishSize }
+      } as any
     });
   };
 
@@ -68,6 +68,7 @@ export default function RigPlanner() {
       data: {
         rodLengthFt: parseFloat(rodLength),
         sinkerWeightOz: parseFloat(sinkerWeight),
+        sinkerType: sinkerType,
         targetDistanceFt: parseFloat(targetDistance)
       }
     });
@@ -122,16 +123,15 @@ export default function RigPlanner() {
                     </Popover>
                   </div>
                   <div className="space-y-2">
-                    <Label>Water Type</Label>
-                    <Select value={waterType} onValueChange={(val: any) => setWaterType(val)}>
+                    <Label>Fish Size</Label>
+                    <Select value={fishSize} onValueChange={(val: any) => setFishSize(val)}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select water type" />
+                        <SelectValue placeholder="Select fish size" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pier">Pier</SelectItem>
-                        <SelectItem value="surf">Surf</SelectItem>
-                        <SelectItem value="bank">Bank</SelectItem>
-                        <SelectItem value="ocean">Ocean</SelectItem>
+                        <SelectItem value="small">Small / Panfish</SelectItem>
+                        <SelectItem value="medium">Medium / Keeper</SelectItem>
+                        <SelectItem value="large">Large / Trophy</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -223,6 +223,22 @@ export default function RigPlanner() {
                   <div className="space-y-2">
                     <Label>Sinker Weight (oz)</Label>
                     <Input type="number" step="any" value={sinkerWeight} onChange={(e) => setSinkerWeight(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sinker Type</Label>
+                    <Select value={sinkerType} onValueChange={setSinkerType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pyramid">Pyramid</SelectItem>
+                        <SelectItem value="spider">Spider</SelectItem>
+                        <SelectItem value="egg">Egg</SelectItem>
+                        <SelectItem value="bullet">Bullet</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                        <SelectItem value="no-roll">No-Roll</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Target Distance (ft)</Label>

@@ -103,6 +103,7 @@ export const GetRigRecommendationsResponse = zod.object({
 export const GetCastAngleBody = zod.object({
   "rodLengthFt": zod.number(),
   "sinkerWeightOz": zod.number(),
+  "sinkerType": zod.string().nullish(),
   "targetDistanceFt": zod.number(),
   "windSpeedMph": zod.number().nullish(),
   "windDirection": zod.string().nullish()

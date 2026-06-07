@@ -8,7 +8,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Dashboard", icon: Navigation },
     { href: "/rig-planner", label: "Rig Planner", icon: Anchor },
     { href: "/fish-id", label: "Scanner", icon: Zap },
-    { href: "/water-map", label: "Water Map", icon: Map },
+    { href: "/water-map", label: "Fish Finder", icon: Map },
     { href: "/catch-log", label: "Catch Log", icon: List },
     { href: "/spots", label: "Spots", icon: Fish },
   ];

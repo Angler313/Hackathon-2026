@@ -1,2 +1,2 @@
-export { openrouter } from "./client";
+export { getOpenRouter, hasOpenRouterKey } from "./client";
 export { batchProcess, batchProcessWithSSE, isRateLimitError, type BatchOptions } from "./batch";

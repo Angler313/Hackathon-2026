@@ -460,7 +460,7 @@ function ConditionsGrid({ conditions, resolvedName, topSpecies, baitRecommendati
             <h3 className="text-base font-semibold text-foreground">Bait &amp; Lure Guide</h3>
             <span className="text-xs text-muted-foreground">— tap a species to expand</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="bait-grid flex flex-col gap-2 md:[column-count:2] md:[column-gap:0.5rem]">
             {baitRecommendations.map(rec => (
               <BaitCard key={rec.species} rec={rec} />
             ))}
