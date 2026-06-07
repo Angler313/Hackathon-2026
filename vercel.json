@@ -1,8 +1,0 @@
-{
-  "buildCommand": "cd Coastal-Angler-Guide && pnpm --filter @workspace/fishing-app run build",
-  "outputDirectory": "Coastal-Angler-Guide/artifacts/fishing-app/dist/public",
-  "installCommand": "cd Coastal-Angler-Guide && pnpm install",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
