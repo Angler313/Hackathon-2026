@@ -1,6 +1,15 @@
 {
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @workspace/fishing-app run build",
+  "outputDirectory": "artifacts/fishing-app/dist/public",
+  "functions": {
+    "api/index.ts": {
+      "memory": 512,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://fantastic-broccoli-wvr56w66qxq5cg764-3001.app.github.dev/api/$1" },
+    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
