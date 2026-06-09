@@ -2,12 +2,6 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm -r --if-present run build",
   "outputDirectory": "artifacts/fishing-app/dist/public",
-  "functions": {
-    "api/index.ts": {
-      "memory": 512,
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
