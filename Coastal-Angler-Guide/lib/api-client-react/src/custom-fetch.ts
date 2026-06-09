@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _vercelBypassToken: string | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,10 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+export function setVercelProtectionBypassToken(token: string | null): void {
+  _vercelBypassToken = token;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -347,6 +352,11 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  // Attach Vercel deployment protection bypass token if configured
+  if (_vercelBypassToken && !headers.has("x-vercel-protection-bypass")) {
+    headers.set("x-vercel-protection-bypass", _vercelBypassToken);
   }
 
   // Attach bearer token when an auth getter is configured and no
