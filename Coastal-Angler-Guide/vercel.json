@@ -1,6 +1,6 @@
 {
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm -r --if-present run build",
+  "buildCommand": "pnpm --filter @workspace/api-server --filter @workspace/fishing-app run build",
   "outputDirectory": "artifacts/fishing-app/dist/public",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
